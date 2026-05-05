@@ -47,7 +47,7 @@ public class HotelApiService {
                 .uri(uriBuilder -> uriBuilder
                         .path("/v1/hotels/locations")
                         .queryParam("name", locationName)
-                        .queryParam("locale", "en-us")
+                        .queryParam("locale", "en-gb")
                         .build())
                 .header("X-RapidAPI-Key", rapidApiKey)
                 .header("X-RapidAPI-Host", rapidApiHost)
@@ -103,7 +103,7 @@ public class HotelApiService {
                                 String.valueOf(request.getRooms()))
                         .queryParam("currency", "USD")
                         .queryParam("filter_by_currency", "USD")
-                        .queryParam("locale", "en-us")
+                        .queryParam("locale", "en-gb")
                         .queryParam("order_by", "popularity")
                         .queryParam("units", "metric")
                         .queryParam("include_adjacency", "true")
@@ -134,7 +134,7 @@ public class HotelApiService {
                 .uri(uriBuilder -> uriBuilder
                         .path("/v1/hotels/data")
                         .queryParam("hotel_id", hotelId)
-                        .queryParam("locale", "en-us")
+                        .queryParam("locale", "en-gb")
                         .build())
                 .header("X-RapidAPI-Key", rapidApiKey)
                 .header("X-RapidAPI-Host", rapidApiHost)
