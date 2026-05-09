@@ -1,0 +1,17 @@
+package com.exploreceylon.backend.dto.trip;
+
+import com.exploreceylon.backend.model.TripDayItem;
+import lombok.Data;
+
+@Data
+public class TripDayItemResponse {
+    private Long id;
+    private TripDayItem.ItemType type;
+    private String referenceId;
+    private String title;
+    private Double cost;
+    private String currency;
+    private Boolean booked;
+    private Integer orderIndex;
+    private String notes;
+}
