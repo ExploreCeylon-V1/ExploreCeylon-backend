@@ -124,3 +124,115 @@ VALUES
 ('Hikkaduwa Coral Festival',
  'Annual festival celebrating the coral reef ecosystem of Hikkaduwa. Snorkeling, diving events and beach activities.',
  'ENTERTAINMENT', 'Hikkaduwa', '2026-03-01', '2026-03-03', NULL, true, NOW());
+
+
+
+INSERT INTO hidden_gems (title, description, category, district,
+    latitude, longitude, how_to_get_there, best_time, tips,
+    approved, rating, review_count, created_at, updated_at)
+VALUES
+
+('Jungle Beach',
+ 'A secluded beach near Unawatuna only accessible by boat or a jungle trek. Crystal clear water with no crowds.',
+ 'BEACH', 'Galle', 6.0089, 80.2491,
+ 'Take a boat from Unawatuna beach (10 min) or hike 30 min through jungle trail.',
+ 'November to April (dry season)', 'Bring snacks — no shops. Go early morning for calm water.',
+ true, 4.8, 245, NOW(), NOW()),
+
+('Hiriketiya Bay',
+ 'A horseshoe shaped bay hidden from the main road. Popular with surfers and digital nomads. Laid back vibe.',
+ 'BEACH', 'Matara', 5.9667, 80.5833,
+ 'From Dickwella town take a tuk-tuk heading south for 3km. Ask for Hiriketiya.',
+ 'October to April', 'Arrive before 8am for the best surf. Several good cafes nearby.',
+ true, 4.7, 189, NOW(), NOW()),
+
+('Ravana Ella Cave',
+ 'A lesser known cave near the Ravana Falls in Ella. According to legend this is where King Ravana kept Sita. Dramatic views.',
+ 'RUINS', 'Badulla', 6.8553, 81.0581,
+ 'From Ella town take the road towards Wellawaya. The cave is 2km from Ravana Falls — unmarked path on the right.',
+ 'January to August', 'Hire a local guide from Ella town for LKR 500. Wear good shoes.',
+ true, 4.6, 134, NOW(), NOW()),
+
+('Bambarakanda Waterfall',
+ 'Sri Lanka highest waterfall at 263 metres. Hidden in the Horton Plains region. Few tourists reach the base.',
+ 'WATERFALL', 'Nuwara Eliya', 6.7833, 80.8167,
+ 'Take the Haputale to Belihuloya road. Bambarakanda village is 3km off the main road. 45 min trek to base.',
+ 'March to May and October to November', 'Trek early morning before mist rolls in. Bring rain gear.',
+ true, 4.9, 312, NOW(), NOW()),
+
+('Yapahuwa Rock Fortress',
+ 'An ancient rock fortress rising 100 metres from the surrounding plain. Far less visited than Sigiriya but equally impressive.',
+ 'RUINS', 'Kurunegala', 7.8333, 80.3167,
+ 'Take the Colombo to Anuradhapura road. Turn at Maho junction — Yapahuwa is 10km from Maho.',
+ 'December to April', 'Arrive at opening time (7am) — you may have the whole place to yourself.',
+ true, 4.5, 98, NOW(), NOW()),
+
+('Ella Rock',
+ 'A challenging hike offering panoramic views of the Ella Gap and surrounding tea estates. More rewarding than Little Adams Peak.',
+ 'VIEWPOINT', 'Badulla', 6.8748, 81.0465,
+ 'Walk along the railway track from Ella station towards Demodara for 2km then follow the trail markers uphill.',
+ 'January to April', 'Start by 6am. Takes 3-4 hours return. No signboards — hire a guide.',
+ true, 4.8, 421, NOW(), NOW()),
+
+('Knuckles Cloud Forest',
+ 'A UNESCO designated cloud forest with unique biodiversity. Remote villages, leeches, mist and extraordinary scenery.',
+ 'VIEWPOINT', 'Matale', 7.4167, 80.8000,
+ 'From Kandy take the Matale road then turn towards Rattota. Arrange permits at the Forest Department office.',
+ 'February to April', 'Multi-day treks available. Register with the Forest Department. Leech socks essential.',
+ true, 4.9, 167, NOW(), NOW()),
+
+('Pigeon Island',
+ 'A tiny island near Trincomalee with some of Sri Lanka best coral reefs. Home to blacktip reef sharks.',
+ 'BEACH', 'Trincomalee', 8.5500, 81.2667,
+ 'Take a boat from Nilaveli Beach (10 min). Book through guesthouses in Nilaveli.',
+ 'April to September (east coast dry season)', 'Snorkeling only — no diving to protect coral. Bring underwater camera.',
+ true, 4.7, 278, NOW(), NOW()),
+
+('Mulkirigala Rock Temple',
+ 'A series of cave temples built into a dramatic granite outcrop. Far less visited than Dambulla but equally impressive.',
+ 'TEMPLE', 'Hambantota', 6.1167, 80.4667,
+ 'From Tangalle take the inland road towards Weeraketiya — Mulkirigala is 16km from Tangalle.',
+ 'Year round', 'Remove shoes before entering. Small entrance fee. Climb to the top for ocean views.',
+ true, 4.6, 112, NOW(), NOW()),
+
+('Pambahinna Village',
+ 'A traditional Sri Lankan village in the Knuckles range where time seems to have stopped. Homestays available.',
+ 'VILLAGE', 'Matale', 7.4500, 80.8333,
+ 'Arrange through Kandy guesthouses. 4WD vehicle required. 3 hour journey from Kandy.',
+ 'February to April', 'Book homestay in advance. Bring cash — no ATMs. Respect local customs.',
+ true, 4.8, 56, NOW(), NOW()),
+
+('Secret Tea Estate Cafe — Nuwara Eliya',
+ 'A hidden cafe inside a working tea estate with panoramic mountain views. Serves single origin tea picked that morning.',
+ 'CAFE', 'Nuwara Eliya', 6.9500, 80.7833,
+ 'Ask locals in Nuwara Eliya for the Lovers Leap estate road. 4km from town centre on an unmarked road.',
+ 'Year round — best during flush season March to May', 'No sign outside. Ring the bell. LKR 200 for tea and biscuits.',
+ true, 4.9, 89, NOW(), NOW()),
+
+('Udawatta Kele Forest Sanctuary',
+ 'A forgotten royal forest reserve in the heart of Kandy city. Ancient trees, monkeys and complete silence despite being central.',
+ 'VIEWPOINT', 'Kandy', 7.2967, 80.6414,
+ 'Enter from Kandy city centre near the Temple of the Tooth — follow signs to the forest reserve entrance.',
+ 'Year round', 'Enter before 8am for bird watching. Bring insect repellent. Carry water.',
+ true, 4.4, 203, NOW(), NOW()),
+
+('Rathnapura Gem Mines',
+ 'Visit a working traditional gem mine in the gem capital of Sri Lanka. Watch miners sift for sapphires and rubies.',
+ 'VILLAGE', 'Ratnapura', 6.6833, 80.4000,
+ 'From Ratnapura town hire a tuk-tuk to the Elapatha area — ask for gem pit visits.',
+ 'Year round — avoid monsoon May to September', 'Negotiate entry fee directly with mine owner. LKR 500-1000.',
+ true, 4.5, 145, NOW(), NOW()),
+
+('Mangrove Safari — Madu River',
+ 'A boat journey through a vast mangrove ecosystem near Balapitiya. Ancient temples on islands, monitor lizards and birds.',
+ 'VILLAGE', 'Galle', 6.2833, 80.0500,
+ 'Take the coastal road between Colombo and Galle. Balapitiya town is 90km from Colombo — boats leave from the river bank.',
+ 'November to April', 'Morning boats have best wildlife. 2 hour tour. Bargain the boat price.',
+ true, 4.6, 334, NOW(), NOW()),
+
+('Ambuluwawa Tower',
+ 'A unique biodiversity complex with a spiral tower on a mountain top offering 360 degree views across four provinces.',
+ 'VIEWPOINT', 'Kandy', 7.1833, 80.5833,
+ 'From Gampola town (20km from Kandy) take the road up Ambuluwawa mountain — 6km of winding road.',
+ 'Year round — clearest views December to April', 'Climb the narrow spiral tower for views. LKR 200 entry.',
+ true, 4.7, 267, NOW(), NOW());
