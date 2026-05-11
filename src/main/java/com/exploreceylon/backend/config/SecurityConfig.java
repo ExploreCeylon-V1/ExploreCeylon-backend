@@ -31,6 +31,7 @@ public class SecurityConfig {
                 .requestMatchers("/api/v1/auth/**").permitAll()
                 .requestMatchers("/api/v1/hotels/**").permitAll()
                 .requestMatchers("/api/v1/vehicles/**").permitAll()
+                .requestMatchers("/api/v1/vehicle-bookings/**").authenticated()
                 .requestMatchers("/api/v1/events/**").permitAll()
                 .requestMatchers("/api/v1/gems/submit").authenticated()
                 .requestMatchers("/api/v1/gems/pending").authenticated()
