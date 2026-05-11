@@ -21,7 +21,7 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 public class SecurityConfig {
 
     private final JwtAuthFilter jwtAuthFilter;
-    private final UserDetailsServiceImpl userDetailsService; // ← වෙනස් කළා
+    private final UserDetailsServiceImpl userDetailsService; 
 
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
@@ -55,7 +55,7 @@ public class SecurityConfig {
     @Bean
     public AuthenticationProvider authenticationProvider() {
         DaoAuthenticationProvider provider = new DaoAuthenticationProvider();
-        provider.setUserDetailsService(userDetailsService); // ← වෙනස් කළා
+        provider.setUserDetailsService(userDetailsService); 
         provider.setPasswordEncoder(passwordEncoder());
         return provider;
     }
