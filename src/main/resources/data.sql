@@ -236,3 +236,57 @@ VALUES
  'From Gampola town (20km from Kandy) take the road up Ambuluwawa mountain — 6km of winding road.',
  'Year round — clearest views December to April', 'Climb the narrow spiral tower for views. LKR 200 entry.',
  true, 4.7, 267, NOW(), NOW());
+
+INSERT INTO tour_guides (full_name, bio, languages, specialties,
+    district, price_per_day, verified, available,
+    rating, review_count, phone, email,
+    created_at, updated_at)
+VALUES
+
+('Kamal Bandara',
+ 'Expert wildlife guide with 12 years experience in Yala and Wilpattu. Excellent tracker with deep knowledge of Sri Lanka wildlife.',
+ 'English,Sinhala', 'WILDLIFE,PHOTOGRAPHY',
+ 'Hambantota', 65.00, true, true, 4.9, 234,
+ '+94771234567', 'kamal.guide@gmail.com', NOW(), NOW()),
+
+('Priya Perera',
+ 'Cultural heritage specialist based in Kandy. Expert in Buddhist temples, Kandyan history and the Esala Perahera festival.',
+ 'English,Sinhala,Tamil', 'CULTURAL,FOOD',
+ 'Kandy', 45.00, true, true, 4.8, 189,
+ '+94777654321', 'priya.guide@gmail.com', NOW(), NOW()),
+
+('Roshan Fernando',
+ 'Professional surf instructor and coastal guide. Certified lifeguard. Based in Arugam Bay for 8 years.',
+ 'English,Sinhala', 'SURFING,WILDLIFE',
+ 'Ampara', 55.00, true, true, 4.7, 156,
+ '+94712345678', 'roshan.surf@gmail.com', NOW(), NOW()),
+
+('Amali Jayasinghe',
+ 'Ayurveda wellness guide and herbal medicine expert. Conducts authentic village ayurveda experiences near Galle.',
+ 'English,Sinhala', 'AYURVEDA,CULTURAL',
+ 'Galle', 40.00, true, true, 4.8, 98,
+ '+94723456789', 'amali.ayur@gmail.com', NOW(), NOW()),
+
+('Nimal Wickrama',
+ 'Expert trekking guide for Ella Rock, Knuckles Range and Adam''s Peak. First aid certified. 15 years experience.',
+ 'English,Sinhala,German', 'TREKKING,PHOTOGRAPHY',
+ 'Badulla', 50.00, true, true, 4.9, 312,
+ '+94734567890', 'nimal.trek@gmail.com', NOW(), NOW()),
+
+('Saman Rajapaksa',
+ 'Bird watching specialist with knowledge of over 400 Sri Lankan bird species. Regular guide at Sinharaja and Kitulgala.',
+ 'English,Sinhala', 'BIRDWATCHING,WILDLIFE',
+ 'Ratnapura', 55.00, true, true, 4.7, 87,
+ '+94745678901', 'saman.birds@gmail.com', NOW(), NOW()),
+
+('Dilini Cooray',
+ 'Food and cooking guide based in Colombo. Conducts Sri Lankan cooking classes and authentic street food tours.',
+ 'English,Sinhala,Tamil,French', 'FOOD,CULTURAL',
+ 'Colombo', 35.00, true, true, 4.6, 143,
+ '+94756789012', 'dilini.food@gmail.com', NOW(), NOW()),
+
+('Asanka Mendis',
+ 'Photography guide specialising in golden hour shoots at Sri Lanka top scenic spots. Professional photographer.',
+ 'English,Sinhala,Japanese', 'PHOTOGRAPHY,TREKKING',
+ 'Nuwara Eliya', 60.00, true, true, 4.8, 76,
+ '+94767890123', 'asanka.photo@gmail.com', NOW(), NOW());
