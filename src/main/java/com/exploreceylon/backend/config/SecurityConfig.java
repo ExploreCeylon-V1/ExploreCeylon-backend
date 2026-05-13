@@ -36,6 +36,7 @@ public class SecurityConfig {
                 .requestMatchers("/api/v1/gems/pending").authenticated()
                 .requestMatchers("/api/v1/gems/**").permitAll()
                 .requestMatchers("/api/v1/guides/**").permitAll()
+                .requestMatchers("/api/v1/guide-bookings/**").authenticated()
                 .requestMatchers("/api/v1/trips/**").authenticated()
                 .requestMatchers("/api/v1/budget/**").authenticated()
                 .requestMatchers("/api/v1/payments/**").authenticated()
