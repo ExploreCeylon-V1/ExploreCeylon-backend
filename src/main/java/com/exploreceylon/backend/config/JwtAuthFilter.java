@@ -22,7 +22,7 @@ import java.io.IOException;
 public class JwtAuthFilter extends OncePerRequestFilter {
 
     private final JwtService jwtService;
-    private final UserDetailsServiceImpl userDetailsService; // ← වෙනස් කළා
+    private final UserDetailsServiceImpl userDetailsService; 
 
     @Override
     protected void doFilterInternal(
