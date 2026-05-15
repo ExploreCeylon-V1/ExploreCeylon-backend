@@ -9,6 +9,11 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.exploreceylon.backend.service.AiService;
+import com.fasterxml.jackson.databind.JsonNode;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
+
 import java.time.LocalDate;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -23,7 +28,7 @@ public class TripService {
     private final TripDayRepository    tripDayRepository;
     private final TripDayItemRepository tripDayItemRepository;
     private final UserRepository       userRepository;
-
+    private final AiService            aiService;
     // ── Get current logged-in user ─────────────────────────
     private User getCurrentUser() {
         String email = SecurityContextHolder.getContext()
@@ -183,6 +188,176 @@ public class TripService {
     public void deleteTrip(Long id) {
         tripRepository.deleteById(id);
         log.info("Trip deleted: {}", id);
+    }
+
+    // ── Generate AI Itinerary ──────────────────────────────
+    public TripResponse generateAiItinerary(GenerateAiTripRequest req) {
+    log.info("Generating AI itinerary for trip: {}", req.getTripId());
+
+    // Get trip
+    Trip trip = tripRepository.findById(req.getTripId())
+            .orElseThrow(() -> new RuntimeException(
+                    "Trip not found: " + req.getTripId()));
+
+    // Build region + interest lists
+    List<String> regions = req.getRegions() != null
+            ? req.getRegions() : List.of();
+    List<String> interests = req.getInterests() != null
+            ? req.getInterests() : List.of();
+
+    // Travel style + budget
+    String travelStyle = req.getTravelStyle() != null
+            ? req.getTravelStyle().name() : "CULTURAL";
+    String budgetRange = req.getBudgetRange() != null
+            ? req.getBudgetRange().name() : "MID_RANGE";
+
+    // Call Python AI Service
+    JsonNode aiResponse = aiService.generateItinerary(
+            req.getStartDate().toString(),
+            req.getEndDate().toString(),
+            travelStyle,
+            budgetRange,
+            req.getGroupSize(),
+            regions,
+            interests,
+            req.getStartingPoint() != null
+                    ? req.getStartingPoint() : "Colombo",
+            req.getSpecialNotes()
+    ).block(); // blocking call — sync
+
+    if (aiResponse == null) {
+        throw new RuntimeException("AI service returned null response");
+    }
+
+    // Check success
+    if (!aiResponse.path("success").asBoolean(false)) {
+        throw new RuntimeException("AI generation failed");
+    }
+
+    JsonNode data = aiResponse.path("data");
+
+    // Update trip title if AI generated one
+    String aiTitle = data.path("tripTitle").asText(null);
+    if (aiTitle != null && !aiTitle.isEmpty()) {
+        trip.setTitle(aiTitle);
+    }
+    trip.setAiGenerated(true);
+
+    // Update preferences
+    if (trip.getPreference() != null) {
+        trip.getPreference().setRegions(
+                String.join(",", regions));
+        trip.getPreference().setInterests(
+                String.join(",", interests));
+        trip.getPreference().setStartingPoint(
+                req.getStartingPoint());
+        trip.getPreference().setSpecialNotes(
+                req.getSpecialNotes());
+    }
+
+    // Clear existing days
+    trip.getDays().clear();
+    tripRepository.save(trip);
+
+    // Build new days from AI response
+    JsonNode daysNode = data.path("days");
+    DateTimeFormatter fmt = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+
+    if (daysNode.isArray()) {
+        for (JsonNode dayNode : daysNode) {
+            int dayNumber = dayNode.path("dayNumber").asInt();
+
+            // Parse date
+            LocalDate dayDate;
+            try {
+                dayDate = LocalDate.parse(
+                        dayNode.path("date").asText(), fmt);
+            } catch (Exception e) {
+                dayDate = req.getStartDate().plusDays(dayNumber - 1);
+            }
+
+            TripDay day = TripDay.builder()
+                    .trip(trip)
+                    .dayNumber(dayNumber)
+                    .date(dayDate)
+                    .region(dayNode.path("region").asText(null))
+                    .theme(dayNode.path("theme").asText(null))
+                    .tips(dayNode.path("tips").asText(null))
+                    .estimatedDayCost(
+                            dayNode.path("estimatedDayCost").asDouble(0))
+                    .build();
+
+            // Add locations as GEM items
+            JsonNode locations = dayNode.path("locations");
+            int orderIndex = 0;
+            if (locations.isArray()) {
+                for (JsonNode loc : locations) {
+                    TripDayItem item = TripDayItem.builder()
+                            .tripDay(day)
+                            .type(TripDayItem.ItemType.ACTIVITY)
+                            .title(loc.asText())
+                            .cost(0.0)
+                            .currency("USD")
+                            .orderIndex(orderIndex++)
+                            .build();
+                    day.getItems().add(item);
+                }
+            }
+
+            // Add hidden gem if present
+            String hiddenGem = dayNode.path("hiddenGem").asText(null);
+            if (hiddenGem != null && !hiddenGem.equals("null")
+                    && !hiddenGem.isEmpty()) {
+                TripDayItem gemItem = TripDayItem.builder()
+                        .tripDay(day)
+                        .type(TripDayItem.ItemType.GEM)
+                        .title("Hidden Gem: " + hiddenGem)
+                        .cost(0.0)
+                        .currency("USD")
+                        .orderIndex(orderIndex++)
+                        .build();
+                day.getItems().add(gemItem);
+            }
+
+            // Add festival event if present
+            String festivalEvent = dayNode.path("festivalEvent")
+                    .asText(null);
+            if (festivalEvent != null && !festivalEvent.equals("null")
+                    && !festivalEvent.isEmpty()) {
+                TripDayItem festItem = TripDayItem.builder()
+                        .tripDay(day)
+                        .type(TripDayItem.ItemType.ACTIVITY)
+                        .title("Festival: " + festivalEvent)
+                        .cost(0.0)
+                        .currency("USD")
+                        .orderIndex(orderIndex++)
+                        .notes("Special festival event on this day!")
+                        .build();
+                day.getItems().add(festItem);
+            }
+
+            // Add transport suggestion
+            String transport = dayNode.path("transport").asText(null);
+            if (transport != null && !transport.isEmpty()) {
+                TripDayItem transportItem = TripDayItem.builder()
+                        .tripDay(day)
+                        .type(TripDayItem.ItemType.TRANSPORT)
+                        .title("Transport: " + transport)
+                        .cost(0.0)
+                        .currency("USD")
+                        .orderIndex(orderIndex++)
+                        .build();
+                day.getItems().add(transportItem);
+            }
+
+            trip.getDays().add(day);
+        }
+    }
+
+    Trip saved = tripRepository.save(trip);
+    log.info("AI itinerary generated: {} days for trip {}",
+            saved.getDays().size(), req.getTripId());
+    return toResponse(saved);
     }
 
     // ── MAPPER: Trip → TripResponse ────────────────────────
