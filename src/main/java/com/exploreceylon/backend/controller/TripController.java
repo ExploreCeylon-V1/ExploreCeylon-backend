@@ -90,4 +90,14 @@ public class TripController {
         tripService.deleteTrip(id);
         return ResponseEntity.ok().build();
     }
+
+    // POST /api/v1/trips/{id}/generate-ai
+    @PostMapping("/{id}/generate-ai")
+    public ResponseEntity<TripResponse> generateAiItinerary(
+            @PathVariable Long id,
+            @RequestBody GenerateAiTripRequest request) {
+        request.setTripId(id);
+        return ResponseEntity.ok(
+                tripService.generateAiItinerary(request));
+    }
 }
