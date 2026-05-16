@@ -34,7 +34,7 @@ public class SecurityConfig {
                 .requestMatchers("/api/v1/vehicle-bookings/**").authenticated()
                 .requestMatchers("/api/v1/events/**").permitAll()
                 .requestMatchers("/api/v1/gems/submit").authenticated()
-                .requestMatchers("/api/v1/gems/pending").authenticated()
+                .requestMatchers("/api/v1/gems/pending").hasRole("ADMIN")
                 .requestMatchers("/api/v1/gems/**").permitAll()
                 .requestMatchers("/api/v1/guides/**").permitAll()
                 .requestMatchers("/api/v1/guide-bookings/**").authenticated()
