@@ -89,6 +89,6 @@ public class User implements UserDetails {
 
     // ── Role Enum ──────────────────────────────────────────────
     public enum Role {
-        TRAVELER, GUIDE, ADMIN, OPERATOR
+        TRAVELER, ADMIN
     }
 }
