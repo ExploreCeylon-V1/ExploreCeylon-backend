@@ -389,13 +389,14 @@ SELECT * FROM (VALUES
 WHERE NOT EXISTS (SELECT 1 FROM destinations LIMIT 1);
 
 
- INSERT INTO users (name, email, password,
-    role, language, created_at, updated_at)
+INSERT INTO users (name, email, password, role, language, created_at, updated_at)
 VALUES (
-    'Admin User',
-    'admin@explorecedylon.com',
-    '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBaITAyJDIn6NG',
-    'ADMIN',
-    'en',
-    NOW(), NOW()
-);
+  'Admin User',
+  'admin@explorecedylon.com',
+  '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBaITAyJDIn6NG',
+  'ADMIN',
+  'en',
+  NOW(),
+  NOW()
+)
+ON CONFLICT (email) DO NOTHING;

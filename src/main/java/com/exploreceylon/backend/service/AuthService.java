@@ -85,6 +85,10 @@ public class AuthService {
         User user = userRepository.findByEmail(request.getEmail())
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
+        if (user.getRole() != User.Role.ADMIN) {
+                throw new RuntimeException("Access denied: insufficient privileges");
+        }
+        
         String accessToken  = jwtService.generateToken(user);
         String refreshToken = jwtService.generateRefreshToken(user);
 

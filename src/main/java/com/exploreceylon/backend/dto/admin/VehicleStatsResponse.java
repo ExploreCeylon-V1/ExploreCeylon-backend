@@ -1,14 +1,19 @@
 package com.exploreceylon.backend.dto.admin;
 
+import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 @Data
 @Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class VehicleStatsResponse {
-    private Long totalVehicles;
-    private Long availableVehicles;
-    private Long bookedVehicles;
-    private Double totalRevenue;
-    private Double totalCommission;
+
+    private long totalVehicles;
+    private long availableVehicles;
+    private long bookedVehicles;
+    private double totalRevenue;
+    private double totalCommission;
 }
