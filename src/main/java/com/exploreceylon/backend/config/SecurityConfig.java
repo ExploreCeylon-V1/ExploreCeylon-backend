@@ -43,6 +43,7 @@ public class SecurityConfig {
                 .requestMatchers("/api/v1/payments/**").authenticated()
                 .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
                 .requestMatchers("/api/v1/destinations/**").permitAll()
+                .requestMatchers("/api/v1/admin/stats/**").permitAll()
                 .anyRequest().authenticated()
             )
             .sessionManagement(session -> session

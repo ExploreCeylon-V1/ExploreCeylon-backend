@@ -13,6 +13,12 @@ import java.util.List;
 public interface VehicleBookingRepository
         extends JpaRepository<VehicleBooking, Long> {
 
+    long countByStatus(VehicleBooking.BookingStatus status);
+
+    @Query("SELECT COALESCE(SUM(b.totalCost), 0) FROM VehicleBooking b " +
+           "WHERE CAST(b.status AS string) = :status")
+    Double sumRevenueByStatus(@Param("status") String status);   
+
     // My bookings
     List<VehicleBooking> findByUserIdOrderByCreatedAtDesc(Long userId);
 
