@@ -11,6 +11,8 @@ import java.util.List;
 @Repository
 public interface VehicleRepository extends JpaRepository<Vehicle, Long> {
 
+    long countByAvailableTrue();
+    
     // Search by district
     List<Vehicle> findByDistrictIgnoreCaseAndAvailableTrue(String district);
 
