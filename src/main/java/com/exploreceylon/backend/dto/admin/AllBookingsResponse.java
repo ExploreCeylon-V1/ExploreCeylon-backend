@@ -1,7 +1,8 @@
 package com.exploreceylon.backend.dto.admin;
 
 import com.exploreceylon.backend.dto.guide.GuideBookingResponse;
-import com.exploreceylon.backend.dto.Vehicle.VehicleBookingResponse;
+import com.exploreceylon.backend.dto.vehicle.VehicleBookingResponse;
+
 import lombok.Builder;
 import lombok.Data;
 

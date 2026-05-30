@@ -1,7 +1,7 @@
 package com.exploreceylon.backend.service;
 
-import com.exploreceylon.backend.dto.Vehicle.LocalVehicleRequest;
-import com.exploreceylon.backend.dto.Vehicle.LocalVehicleResponse;
+import com.exploreceylon.backend.dto.vehicle.LocalVehicleRequest;
+import com.exploreceylon.backend.dto.vehicle.LocalVehicleResponse;
 import com.exploreceylon.backend.model.Vehicle;
 import com.exploreceylon.backend.repository.VehicleRepository;
 import lombok.RequiredArgsConstructor;
@@ -44,7 +44,7 @@ public class LocalVehicleService {
                     type
             );
         } else {
-            vehicles = vehicleRepository.findByAvailableTrue();
+            vehicles = vehicleRepository.findAll();
         }
 
         // Filter airport transfer
@@ -69,7 +69,7 @@ public class LocalVehicleService {
 
     // ── Get All Vehicles ───────────────────────────────────────
     public List<LocalVehicleResponse> getAllVehicles() {
-        return vehicleRepository.findByAvailableTrue()
+        return vehicleRepository.findAll()
                 .stream()
                 .map(this::toResponse)
                 .collect(Collectors.toList());

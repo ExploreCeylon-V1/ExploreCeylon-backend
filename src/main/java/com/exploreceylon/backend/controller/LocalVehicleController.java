@@ -1,7 +1,7 @@
 package com.exploreceylon.backend.controller;
 
-import com.exploreceylon.backend.dto.Vehicle.LocalVehicleRequest;
-import com.exploreceylon.backend.dto.Vehicle.LocalVehicleResponse;
+import com.exploreceylon.backend.dto.vehicle.LocalVehicleRequest;
+import com.exploreceylon.backend.dto.vehicle.LocalVehicleResponse;
 import com.exploreceylon.backend.service.LocalVehicleService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
