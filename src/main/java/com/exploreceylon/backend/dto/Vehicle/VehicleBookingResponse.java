@@ -1,4 +1,4 @@
-package com.exploreceylon.backend.dto.Vehicle;
+package com.exploreceylon.backend.dto.vehicle;
 
 import com.exploreceylon.backend.model.VehicleBooking;
 import lombok.Data;

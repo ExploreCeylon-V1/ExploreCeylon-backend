@@ -1,7 +1,7 @@
 package com.exploreceylon.backend.service;
 
-import com.exploreceylon.backend.dto.Vehicle.LocalVehicleRequest;
-import com.exploreceylon.backend.dto.Vehicle.LocalVehicleResponse;
+import com.exploreceylon.backend.dto.vehicle.LocalVehicleRequest;
+import com.exploreceylon.backend.dto.vehicle.LocalVehicleResponse;
 import com.exploreceylon.backend.model.Vehicle;
 import com.exploreceylon.backend.repository.VehicleRepository;
 import lombok.RequiredArgsConstructor;

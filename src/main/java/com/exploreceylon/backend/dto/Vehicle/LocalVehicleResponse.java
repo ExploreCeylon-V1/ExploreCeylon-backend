@@ -1,4 +1,4 @@
-package com.exploreceylon.backend.dto.Vehicle;
+package com.exploreceylon.backend.dto.vehicle;
 
 import lombok.Data;
 import java.util.List;
