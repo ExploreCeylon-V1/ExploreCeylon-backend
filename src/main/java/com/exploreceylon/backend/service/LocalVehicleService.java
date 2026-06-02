@@ -44,7 +44,7 @@ public class LocalVehicleService {
                     type
             );
         } else {
-            vehicles = vehicleRepository.findByAvailableTrue();
+            vehicles = vehicleRepository.findAll();
         }
 
         // Filter airport transfer
@@ -69,7 +69,7 @@ public class LocalVehicleService {
 
     // ── Get All Vehicles ───────────────────────────────────────
     public List<LocalVehicleResponse> getAllVehicles() {
-        return vehicleRepository.findByAvailableTrue()
+        return vehicleRepository.findAll()
                 .stream()
                 .map(this::toResponse)
                 .collect(Collectors.toList());
@@ -106,6 +106,57 @@ public class LocalVehicleService {
         Vehicle saved = vehicleRepository.save(vehicle);
         log.info("Added new vehicle: {}", saved.getName());
         return toResponse(saved);
+    }
+
+    // ── Update Vehicle (Admin) ─────────────────────────────────
+    public LocalVehicleResponse updateVehicle(Long id, Vehicle updatedVehicle) {
+        Vehicle existingVehicle = vehicleRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Vehicle not found"));
+
+        if (updatedVehicle.getName() != null) {
+            existingVehicle.setName(updatedVehicle.getName());
+        }
+        if (updatedVehicle.getType() != null) {
+            existingVehicle.setType(updatedVehicle.getType());
+        }
+        if (updatedVehicle.getCategory() != null) {
+            existingVehicle.setCategory(updatedVehicle.getCategory());
+        }
+        existingVehicle.setBrand(updatedVehicle.getBrand());
+        existingVehicle.setModel(updatedVehicle.getModel());
+        existingVehicle.setYear(updatedVehicle.getYear());
+        existingVehicle.setSeats(updatedVehicle.getSeats());
+        existingVehicle.setColor(updatedVehicle.getColor());
+        existingVehicle.setLicensePlate(updatedVehicle.getLicensePlate());
+        if (updatedVehicle.getPricePerDay() != null) {
+            existingVehicle.setPricePerDay(updatedVehicle.getPricePerDay());
+        }
+        existingVehicle.setCurrency(updatedVehicle.getCurrency());
+        existingVehicle.setDistrict(updatedVehicle.getDistrict());
+        existingVehicle.setPickupLocation(updatedVehicle.getPickupLocation());
+        existingVehicle.setLatitude(updatedVehicle.getLatitude());
+        existingVehicle.setLongitude(updatedVehicle.getLongitude());
+        existingVehicle.setDriverName(updatedVehicle.getDriverName());
+        existingVehicle.setDriverPhone(updatedVehicle.getDriverPhone());
+        existingVehicle.setDriverLanguages(updatedVehicle.getDriverLanguages());
+        existingVehicle.setDriverIncluded(updatedVehicle.getDriverIncluded());
+        existingVehicle.setAirportTransfer(updatedVehicle.getAirportTransfer());
+        existingVehicle.setAvailable(updatedVehicle.getAvailable());
+        existingVehicle.setDescription(updatedVehicle.getDescription());
+        existingVehicle.setImageUrls(updatedVehicle.getImageUrls());
+
+        Vehicle saved = vehicleRepository.save(existingVehicle);
+        log.info("Updated vehicle: {}", saved.getName());
+        return toResponse(saved);
+    }
+
+    // ── Delete Vehicle (Admin) ─────────────────────────────────
+    public void deleteVehicle(Long id) {
+        if (!vehicleRepository.existsById(id)) {
+            throw new RuntimeException("Vehicle not found");
+        }
+        vehicleRepository.deleteById(id);
+        log.info("Deleted vehicle with id: {}", id);
     }
 
     // ── Update Availability ────────────────────────────────────
