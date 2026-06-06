@@ -389,3 +389,19 @@ SELECT * FROM (VALUES
 WHERE NOT EXISTS (SELECT 1 FROM destinations LIMIT 1);
 
 
+INSERT INTO users (name, email, password, role, nationality, created_at, updated_at)
+SELECT * FROM (VALUES
+    ('Admin User',
+     'admin@exploreceylon.com',
+     '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2uheWG/igi.',
+     'ADMIN',
+     'Sri Lankan',
+     NOW(), NOW()),
+    ('Kamal Perera',
+     'nimal@gmail.com',
+     '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2uheWG/igi.',
+     'TRAVELER',
+     'Sri Lankan',
+     NOW(), NOW())
+) AS new_data (name, email, password, role, nationality, created_at, updated_at)
+WHERE NOT EXISTS (SELECT 1 FROM users LIMIT 1);

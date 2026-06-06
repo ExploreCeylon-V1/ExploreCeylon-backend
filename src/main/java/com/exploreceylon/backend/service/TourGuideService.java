@@ -9,6 +9,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -171,6 +172,16 @@ public class TourGuideService {
                 .collect(Collectors.toList());
     }
 
+    // ── Get Guide Bookings ─────────────────────────────────
+    public List<GuideBookingResponse> getGuideBookingsByGuideId(Long guideId) {
+        findGuide(guideId);
+        return bookingRepository
+                .findByGuideIdOrderByCreatedAtDesc(guideId)
+                .stream()
+                .map(this::toBookingResponse)
+                .collect(Collectors.toList());
+    }
+
     // ── Write Review ───────────────────────────────────────
     public ReviewResponse writeReview(Long guideId,
                                       CreateReviewRequest req) {
@@ -270,5 +281,11 @@ public class TourGuideService {
         res.setComment(r.getComment());
         res.setCreatedAt(r.getCreatedAt());
         return res;
+    }
+
+    private boolean isEffectivelyCompleted(GuideBooking b) {
+        return (b.getStatus() == GuideBooking.BookingStatus.COMPLETED ||
+                b.getStatus() == GuideBooking.BookingStatus.CONFIRMED)
+               && b.getEndDate().isBefore(LocalDate.now());
     }
 }

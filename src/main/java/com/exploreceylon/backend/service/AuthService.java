@@ -23,23 +23,19 @@ public class AuthService {
     private final JwtService jwtService;
     private final AuthenticationManager authenticationManager;
 
-    // ── Register ───────────────────────────────────────────────
     public AuthResponse register(RegisterRequest request) {
         log.info("Registering new user: {}", request.getEmail());
 
         if (userRepository.existsByEmail(request.getEmail())) {
-            throw new RuntimeException("Email already registered: "
-                    + request.getEmail());
+            throw new RuntimeException("Email already registered: " + request.getEmail());
         }
 
-        // Parse role
         User.Role role = User.Role.TRAVELER;
         if (request.getRole() != null) {
             try {
                 role = User.Role.valueOf(request.getRole().toUpperCase());
             } catch (Exception e) {
-                log.warn("Invalid role: {}, defaulting to TRAVELER",
-                        request.getRole());
+                log.warn("Invalid role: {}, defaulting to TRAVELER", request.getRole());
             }
         }
 
@@ -49,15 +45,14 @@ public class AuthService {
                 .password(passwordEncoder.encode(request.getPassword()))
                 .role(role)
                 .nationality(request.getNationality())
-                .language(request.getLanguage() != null
-                        ? request.getLanguage() : "en")
+                .language(request.getLanguage() != null ? request.getLanguage() : "en")
                 .phone(request.getPhone())
                 .build();
 
         userRepository.save(user);
         log.info("User registered successfully: {}", user.getEmail());
 
-        String accessToken  = jwtService.generateToken(user);
+        String accessToken = jwtService.generateToken(user);
         String refreshToken = jwtService.generateRefreshToken(user);
 
         return AuthResponse.builder()
@@ -71,7 +66,6 @@ public class AuthService {
                 .build();
     }
 
-    // ── Login ──────────────────────────────────────────────────
     public AuthResponse login(LoginRequest request) {
         log.info("Login attempt: {}", request.getEmail());
 
@@ -85,11 +79,7 @@ public class AuthService {
         User user = userRepository.findByEmail(request.getEmail())
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
-        if (user.getRole() != User.Role.ADMIN) {
-                throw new RuntimeException("Access denied: insufficient privileges");
-        }
-        
-        String accessToken  = jwtService.generateToken(user);
+        String accessToken = jwtService.generateToken(user);
         String refreshToken = jwtService.generateRefreshToken(user);
 
         log.info("Login successful: {}", user.getEmail());

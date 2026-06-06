@@ -1,19 +1,29 @@
 package com.exploreceylon.backend.controller;
 
 import com.exploreceylon.backend.dto.guide.*;
+import com.exploreceylon.backend.model.GuidePayment;
+import com.exploreceylon.backend.repository.GuideBookingRepository;
+import com.exploreceylon.backend.repository.GuidePaymentRepository;
 import com.exploreceylon.backend.service.TourGuideService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 
 @RestController
 @RequiredArgsConstructor
 public class TourGuideController {
 
     private final TourGuideService guideService;
+    private final GuidePaymentRepository paymentRepository;
+    private final GuideBookingRepository bookingRepository; 
 
     // ── Guide Endpoints ────────────────────────────────────
 
@@ -106,5 +116,80 @@ public class TourGuideController {
     @GetMapping("/api/v1/guide-bookings/my")
     public ResponseEntity<List<GuideBookingResponse>> getMyBookings() {
         return ResponseEntity.ok(guideService.getMyBookings());
+    }
+
+    // GET /api/v1/guides/{id}/bookings
+    @GetMapping("/api/v1/guides/{id}/bookings")
+    public ResponseEntity<List<GuideBookingResponse>> getGuideBookings(
+            @PathVariable Long id) {
+        return ResponseEntity.ok(guideService.getGuideBookingsByGuideId(id));
+    }
+
+    // GET /api/v1/guide-payments/completed-summary
+    @GetMapping("/api/v1/guide-payments/completed-summary")
+    public ResponseEntity<List<Map<String, Object>>> getCompletedSummary() {
+        // All guides ගන්නවා
+        List<GuideResponse> guides = guideService.getAllGuides(null, null, null, null);
+        String today = LocalDate.now().toString();
+
+        List<Map<String, Object>> summaries = new ArrayList<>();
+
+        for (GuideResponse guide : guides) {
+            // ඒ guide ගේ completed bookings (CONFIRMED + endDate < today)
+            List<GuideBookingResponse> bookings = guideService.getGuideBookingsByGuideId(guide.getId());
+            List<GuideBookingResponse> completed = bookings.stream()
+                .filter(b -> "CONFIRMED".equals(b.getStatus()) && b.getEndDate().toString().compareTo(today) < 0)
+                .toList();
+
+            if (completed.isEmpty()) continue;
+
+            double totalEarned = completed.stream().mapToDouble(GuideBookingResponse::getTotalCost).sum();
+            double commission = Math.round(totalEarned * 0.15 * 100.0) / 100.0;
+            double amountPaid = Math.round(totalEarned * 0.85 * 100.0) / 100.0;
+
+            Optional<GuidePayment> existingPayment = paymentRepository.findByGuideId(guide.getId());
+
+            Map<String, Object> summary = new HashMap<>();
+            summary.put("guideId", guide.getId());
+            summary.put("guideName", guide.getFullName());
+            summary.put("bookingIds", completed.stream().map(GuideBookingResponse::getId).toList());
+            summary.put("totalEarned", totalEarned);
+            summary.put("commissionDeducted", commission);
+            summary.put("amountPaid", amountPaid);
+            summary.put("paymentStatus", existingPayment.map(p -> p.getStatus().name()).orElse("UNPAID"));
+            summary.put("paymentDate", existingPayment.map(p -> p.getPaymentDate().toString()).orElse(null));
+            summary.put("paymentRecordId", existingPayment.map(GuidePayment::getId).orElse(null));
+
+            summaries.add(summary);
+        }
+
+        return ResponseEntity.ok(summaries);
+    }
+
+    // POST /api/v1/guide-payments/{guideId}/mark-paid
+    @PostMapping("/api/v1/guide-payments/{guideId}/mark-paid")
+    public ResponseEntity<Map<String, Object>> markGuideAsPaid(
+            @PathVariable Long guideId,
+            @RequestBody Map<String, Object> payload) {
+
+        GuidePayment payment = GuidePayment.builder()
+            .guideId(guideId)
+            .totalEarned(((Number) payload.get("totalEarned")).doubleValue())
+            .commissionDeducted(((Number) payload.get("commissionDeducted")).doubleValue())
+            .amountPaid(((Number) payload.get("amountPaid")).doubleValue())
+            .paymentDate(LocalDate.parse((String) payload.get("paymentDate")))
+            .status(GuidePayment.PaymentStatus.PAID)
+            .build();
+
+        GuidePayment saved = paymentRepository.save(payment);
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("id", saved.getId());
+        response.put("guideId", saved.getGuideId());
+        response.put("paymentDate", saved.getPaymentDate().toString());
+        response.put("status", saved.getStatus().name());
+        response.put("amountPaid", saved.getAmountPaid());
+
+        return ResponseEntity.ok(response);
     }
 }
