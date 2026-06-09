@@ -413,7 +413,7 @@ SELECT * FROM (VALUES
      'sadun@gmail.com',
      '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2uheWG/igi.',
      'TRAVELER',
-     'Sri Lankan',
+     'India',
      NOW(), NOW())
 ) AS new_data (name, email, password, role, nationality, created_at, updated_at)
 WHERE NOT EXISTS (SELECT 1 FROM users LIMIT 1);
