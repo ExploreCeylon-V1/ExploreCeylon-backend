@@ -8,6 +8,8 @@ import lombok.NoArgsConstructor;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 @Entity
 @Table(name = "events")
@@ -40,7 +42,14 @@ public class Event {
     @Column(nullable = false)
     private LocalDate endDate;
 
-    private String imageUrl;
+    @ElementCollection
+    @CollectionTable(
+        name = "event_images",
+        joinColumns = @JoinColumn(name = "event_id")
+    )
+    @Column(name = "image_url")
+    @Builder.Default
+    private List<String> imageUrls = new ArrayList<>();
 
     @Builder.Default
     private Boolean isRecurring = true;

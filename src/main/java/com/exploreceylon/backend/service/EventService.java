@@ -97,7 +97,8 @@ public class EventService {
                 .region(req.getRegion())
                 .startDate(req.getStartDate())
                 .endDate(req.getEndDate())
-                .imageUrl(req.getImageUrl())
+                .imageUrls(req.getImageUrls() != null 
+                    ? req.getImageUrls() : List.of())
                 .isRecurring(req.getIsRecurring() != null
                         ? req.getIsRecurring() : true)
                 .build();
@@ -115,7 +116,7 @@ public class EventService {
         if (req.getRegion()      != null) event.setRegion(req.getRegion());
         if (req.getStartDate()   != null) event.setStartDate(req.getStartDate());
         if (req.getEndDate()     != null) event.setEndDate(req.getEndDate());
-        if (req.getImageUrl()    != null) event.setImageUrl(req.getImageUrl());
+        if (req.getImageUrls()    != null) event.setImageUrls(req.getImageUrls());
         return toResponse(eventRepository.save(event));
     }
 
@@ -135,7 +136,7 @@ public class EventService {
         res.setRegion(e.getRegion());
         res.setStartDate(e.getStartDate());
         res.setEndDate(e.getEndDate());
-        res.setImageUrl(e.getImageUrl());
+        res.setImageUrls(e.getImageUrls());
         res.setIsRecurring(e.getIsRecurring());
         res.setCreatedAt(e.getCreatedAt());
         return res;
