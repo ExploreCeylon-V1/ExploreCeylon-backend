@@ -5,7 +5,7 @@ import lombok.Data;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-
+import java.util.List;
 @Data
 public class EventResponse {
     private Long id;
@@ -15,7 +15,7 @@ public class EventResponse {
     private String region;
     private LocalDate startDate;
     private LocalDate endDate;
-    private String imageUrl;
+    private List<String> imageUrls;
     private Boolean isRecurring;
     private LocalDateTime createdAt;
 }
