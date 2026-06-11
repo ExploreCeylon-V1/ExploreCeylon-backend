@@ -6,6 +6,7 @@ import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 
 import java.time.LocalDate;
+import java.util.List;
 
 @Data
 public class CreateEventRequest {
@@ -27,6 +28,6 @@ public class CreateEventRequest {
     @NotNull(message = "End date is required")
     private LocalDate endDate;
 
-    private String imageUrl;
+    private List<String> imageUrls;
     private Boolean isRecurring;
 }
