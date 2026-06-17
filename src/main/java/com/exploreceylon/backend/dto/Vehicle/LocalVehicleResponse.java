@@ -11,6 +11,11 @@ public class LocalVehicleResponse {
     private String category;
     private String brand;
     private String model;
+    private Integer year;
+    private String color;
+    private String licensePlate;
+    private Double latitude;
+    private Double longitude;
     private Integer seats;
     private Double pricePerDay;
     private String currency;
