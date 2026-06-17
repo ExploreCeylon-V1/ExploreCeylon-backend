@@ -176,6 +176,11 @@ public class LocalVehicleService {
         res.setCategory(v.getCategory() != null ? v.getCategory().name() : "");
         res.setBrand(v.getBrand());
         res.setModel(v.getModel());
+        res.setYear(v.getYear());
+        res.setColor(v.getColor());
+        res.setLicensePlate(v.getLicensePlate());
+        res.setLatitude(v.getLatitude());
+        res.setLongitude(v.getLongitude());
         res.setSeats(v.getSeats());
         res.setPricePerDay(v.getPricePerDay());
         res.setCurrency(v.getCurrency());
