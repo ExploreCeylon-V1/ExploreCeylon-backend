@@ -23,6 +23,7 @@ public class DestinationResponse {
     private String entryFee;
     private String openingHours;
     private Boolean featured;
+    private Boolean active;
     private Double rating;
     private Integer reviewCount;
     private String unescoStatus;

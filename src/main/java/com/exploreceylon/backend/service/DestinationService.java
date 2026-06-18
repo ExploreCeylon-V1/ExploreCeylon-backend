@@ -22,30 +22,49 @@ public class DestinationService {
     public List<DestinationResponse> getAllDestinations(
             Destination.DestinationCategory category,
             String province,
-            String month) {
+            String month,
+            boolean includeAll) {
 
         List<Destination> destinations;
 
-        if (category != null && province != null) {
-            destinations = destinationRepository
-                    .findByCategoryAndProvinceIgnoreCaseAndActiveTrue(
-                            category, province);
-        } else if (category != null) {
-            destinations = destinationRepository
-                    .findByCategoryAndActiveTrueOrderByRatingDesc(
-                            category);
-        } else if (province != null) {
-            destinations = destinationRepository
-                    .findByProvinceIgnoreCaseAndActiveTrueOrderByRatingDesc(
-                            province);
-        } else if (month != null) {
-            destinations = destinationRepository
-                    .findByBestMonth(month);
-        } else {
-            destinations = destinationRepository
-                    .findByActiveTrueOrderByRatingDesc();
+        // 1. PUBLIC WEBSITE: සාමාන්‍ය වෙබ්සයිට් එකට (Active කරලා තියෙන ඒවා විතරයි පෙන්වන්නේ)
+        if (!includeAll) {
+            if (category != null && province != null) {
+                destinations = destinationRepository
+                        .findByCategoryAndProvinceIgnoreCaseAndActiveTrue(category, province);
+            } else if (category != null) {
+                destinations = destinationRepository
+                        .findByCategoryAndActiveTrueOrderByRatingDesc(category);
+            } else if (province != null) {
+                destinations = destinationRepository
+                        .findByProvinceIgnoreCaseAndActiveTrueOrderByRatingDesc(province);
+            } else if (month != null) {
+                // මෙහිදී අදාළ මාසයේ දත්ත ගන්නවා
+                destinations = destinationRepository.findByBestMonth(month);
+            } else {
+                destinations = destinationRepository
+                        .findByActiveTrueOrderByRatingDesc();
+            }
+        } 
+        // 2. ADMIN PANEL: ඇඩ්මින් පැනල් එකට (Active, Inactive ඔක්කොම පෙන්වනවා)
+        else {
+            // Admin සඳහා Database එකේ තියෙන 12 ම (සියල්ලම) ගන්නවා
+            destinations = destinationRepository.findAll();
+            
+            // Admin Panel එකෙනුත් Dropdown හරහා Category / Province ෆිල්ටර් කළොත් ඒ ටික වෙන් කරනවා
+            if (category != null) {
+                destinations = destinations.stream()
+                        .filter(d -> d.getCategory() == category)
+                        .collect(Collectors.toList());
+            }
+            if (province != null) {
+                destinations = destinations.stream()
+                        .filter(d -> d.getProvince() != null && d.getProvince().equalsIgnoreCase(province))
+                        .collect(Collectors.toList());
+            }
         }
 
+        // අවසානයේ Response එකට Map කරලා යවනවා
         return destinations.stream()
                 .map(this::toResponse)
                 .collect(Collectors.toList());
@@ -102,7 +121,7 @@ public class DestinationService {
                         ? req.getFeatured() : false)
                 .unescoStatus(req.getUnescoStatus())
                 .nearbyGems(req.getNearbyGems())
-                .active(true)
+                .active(req.getActive() != null ? req.getActive() : true)
                 .build();
         return toResponse(destinationRepository.save(dest));
     }
@@ -131,6 +150,7 @@ public class DestinationService {
         if (req.getFeatured()        != null) dest.setFeatured(req.getFeatured());
         if (req.getUnescoStatus()    != null) dest.setUnescoStatus(req.getUnescoStatus());
         if (req.getNearbyGems()      != null) dest.setNearbyGems(req.getNearbyGems());
+        if (req.getActive()          != null) dest.setActive(req.getActive());
 
         return toResponse(destinationRepository.save(dest));
     }
@@ -150,9 +170,8 @@ public class DestinationService {
         Destination dest = destinationRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException(
                         "Destination not found: " + id));
-        dest.setActive(false); // soft delete
-        destinationRepository.save(dest);
-        log.info("Destination soft-deleted: {}", id);
+        destinationRepository.delete(dest);
+        log.info("Destination permanently deleted: {}", id);
     }
 
     // ── MAPPER ─────────────────────────────────────────────
@@ -175,10 +194,22 @@ public class DestinationService {
         res.setEntryFee(d.getEntryFee());
         res.setOpeningHours(d.getOpeningHours());
         res.setFeatured(d.getFeatured());
+        res.setActive(d.getActive()); 
         res.setRating(d.getRating());
         res.setReviewCount(d.getReviewCount());
         res.setUnescoStatus(d.getUnescoStatus());
         res.setNearbyGems(d.getNearbyGems());
         return res;
+    }
+
+    // ── Toggle Active Status ────────────────────────────────────
+    public DestinationResponse toggleActive(Long id, Boolean active) {
+        Destination destination = destinationRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Destination not found"));
+        
+        destination.setActive(active);
+        Destination saved = destinationRepository.save(destination);
+        
+        return toResponse(saved); 
     }
 }
