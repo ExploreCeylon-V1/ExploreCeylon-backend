@@ -13,6 +13,7 @@ public class EventResponse {
     private String description;
     private Event.EventCategory category;
     private String region;
+    private String location;
     private LocalDate startDate;
     private LocalDate endDate;
     private List<String> imageUrls;

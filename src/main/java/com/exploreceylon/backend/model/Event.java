@@ -37,6 +37,9 @@ public class Event {
     private String region;
 
     @Column(nullable = false)
+    private String location;
+
+    @Column(nullable = false)
     private LocalDate startDate;
 
     @Column(nullable = false)
@@ -65,6 +68,6 @@ public class Event {
     // ── Enum ───────────────────────────────────────────────
     public enum EventCategory {
         FESTIVAL, RELIGIOUS, WILDLIFE,
-        SURF, FOOD, ENTERTAINMENT, MONSOON
+        SURF, FOOD, ENTERTAINMENT, MONSOON,
     }
 }

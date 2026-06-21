@@ -22,6 +22,9 @@ public class CreateEventRequest {
     @NotBlank(message = "Region is required")
     private String region;
 
+    @NotBlank(message = "Location is required")
+    private String location;
+
     @NotNull(message = "Start date is required")
     private LocalDate startDate;
 

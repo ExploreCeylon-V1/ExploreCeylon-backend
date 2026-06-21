@@ -95,6 +95,7 @@ public class EventService {
                 .description(req.getDescription())
                 .category(req.getCategory())
                 .region(req.getRegion())
+                .location(req.getLocation())
                 .startDate(req.getStartDate())
                 .endDate(req.getEndDate())
                 .imageUrls(req.getImageUrls() != null 
@@ -114,6 +115,7 @@ public class EventService {
         if (req.getDescription() != null) event.setDescription(req.getDescription());
         if (req.getCategory()    != null) event.setCategory(req.getCategory());
         if (req.getRegion()      != null) event.setRegion(req.getRegion());
+        if (req.getLocation()    != null) event.setLocation(req.getLocation());
         if (req.getStartDate()   != null) event.setStartDate(req.getStartDate());
         if (req.getEndDate()     != null) event.setEndDate(req.getEndDate());
         if (req.getImageUrls()    != null) event.setImageUrls(req.getImageUrls());
@@ -134,6 +136,7 @@ public class EventService {
         res.setDescription(e.getDescription());
         res.setCategory(e.getCategory());
         res.setRegion(e.getRegion());
+        res.setLocation(e.getLocation());
         res.setStartDate(e.getStartDate());
         res.setEndDate(e.getEndDate());
         res.setImageUrls(e.getImageUrls());
