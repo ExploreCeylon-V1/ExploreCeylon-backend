@@ -24,10 +24,11 @@ public class DestinationController {
             @RequestParam(required = false)
             Destination.DestinationCategory category,
             @RequestParam(required = false) String province,
-            @RequestParam(required = false) String month) {
+            @RequestParam(required = false) String month,
+            @RequestParam(value = "includeAll",required = false, defaultValue = "false") boolean includeAll) {
         return ResponseEntity.ok(
                 destinationService.getAllDestinations(
-                        category, province, month));
+                        category, province, month, includeAll));
     }
 
     // GET /api/v1/destinations/featured
@@ -83,6 +84,15 @@ public class DestinationController {
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> delete(@PathVariable Long id) {
         destinationService.delete(id);
-        return ResponseEntity.ok().build();
+        return ResponseEntity.noContent().build();
+}
+
+    // PUT /api/v1/destinations/{id}/active (Admin)
+    @PutMapping("/{id}/active")
+    public ResponseEntity<DestinationResponse> toggleActive(
+            @PathVariable Long id,
+            @RequestParam Boolean active) {
+        return ResponseEntity.ok(
+                destinationService.toggleActive(id, active));
     }
 }
