@@ -108,7 +108,14 @@
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-validation</artifactId>
 		</dependency>
-	</dependencies>
+
+		<!-- AWS S3 -->
+		<dependency>
+				<groupId>software.amazon.awssdk</groupId>
+				<artifactId>s3</artifactId>
+				<version>2.25.40</version>
+			</dependency>
+		</dependencies>
 
 	<build>
 		<plugins>
