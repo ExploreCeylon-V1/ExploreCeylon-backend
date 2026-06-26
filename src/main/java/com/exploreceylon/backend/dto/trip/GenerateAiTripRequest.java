@@ -29,4 +29,6 @@ public class GenerateAiTripRequest {
     private List<String> interests;
     private String startingPoint;
     private String specialNotes;
+    private String fromLocation;
+    private String toLocation;
 }

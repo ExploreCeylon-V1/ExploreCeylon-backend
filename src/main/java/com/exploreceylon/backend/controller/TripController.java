@@ -5,6 +5,8 @@ import com.exploreceylon.backend.service.TripService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -52,6 +54,14 @@ public class TripController {
             @RequestBody TripDayResponse request) {
         return ResponseEntity.ok(
                 tripService.updateTripDay(tripId, dayId, request));
+    }
+
+    // PATCH /api/v1/trips/{id}/title
+    @PatchMapping("/{id}/title")
+    public ResponseEntity<TripResponse> updateTitle(
+        @PathVariable Long id,
+        @RequestBody @Valid UpdateTripTitleRequest req) {
+        return ResponseEntity.ok(tripService.updateTripTitle(id, req.getTitle()));
     }
 
     // POST /api/v1/trips/{tripId}/days/{dayId}/items — Add item
