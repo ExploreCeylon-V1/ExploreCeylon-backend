@@ -12,6 +12,7 @@ import org.springframework.web.reactive.function.client.WebClientResponseExcepti
 import reactor.core.publisher.Mono;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
@@ -101,8 +102,12 @@ public class HotelApiService {
                                 String.valueOf(request.getAdults()))
                         .queryParam("room_number",
                                 String.valueOf(request.getRooms()))
-                        .queryParam("currency", "USD")
-                        .queryParam("filter_by_currency", "USD")
+                        .queryParam("currency",
+                                request.getCurrency() != null && !request.getCurrency().isBlank()
+                                        ? request.getCurrency() : "USD")
+                        .queryParam("filter_by_currency",
+                                request.getCurrency() != null && !request.getCurrency().isBlank()
+                                        ? request.getCurrency() : "USD")
                         .queryParam("locale", "en-gb")
                         .queryParam("order_by", "popularity")
                         .queryParam("units", "metric")
@@ -112,7 +117,7 @@ public class HotelApiService {
                 .header("X-RapidAPI-Host", rapidApiHost)
                 .retrieve()
                 .bodyToMono(JsonNode.class)
-                .map(this::parseHotelResults)
+                .map(json -> parseHotelResults(json, request.getCurrency()))
                 .onErrorResume(WebClientResponseException.class, e -> {
                     log.error("Hotel search API error: {} - Body: {}",
                             e.getStatusCode(), e.getResponseBodyAsString());
@@ -149,7 +154,7 @@ public class HotelApiService {
     // ═══════════════════════════════════════════════════════════
     // PARSE — API Response → HotelResult List
     // ═══════════════════════════════════════════════════════════
-    private List<HotelResult> parseHotelResults(JsonNode response) {
+    private List<HotelResult> parseHotelResults(JsonNode response, String requestedCurrency) {
         List<HotelResult> hotels = new ArrayList<>();
 
         // Log raw response for debugging
@@ -177,10 +182,48 @@ public class HotelApiService {
 
                 hotel.setReviewScore(node.path("review_score").asDouble(0));
                 hotel.setReviewScoreWord(node.path("review_score_word").asText(""));
+                hotel.setReviewsCount(node.path("review_nr").asInt(0));
                 hotel.setPricePerNight(node.path("min_total_price").asDouble(0));
-                hotel.setCurrency(node.path("currency_code").asText("USD"));
+                hotel.setCurrency(node.path("currency_code").asText(
+                        requestedCurrency != null && !requestedCurrency.isBlank() ? requestedCurrency : "USD"));
                 hotel.setStars(node.path("class").asInt(0));
                 hotel.setPhotoUrl(node.path("main_photo_url").asText(""));
+
+                // Property type — e.g. "Hotel", "Resort", "Apartment"
+                String accommodationType = node.path("accommodation_type_name").asText("");
+                hotel.setPropertyType(accommodationType.isEmpty() ? "Hotel" : accommodationType);
+
+                // Amenities — API doesn't always include this; parse defensively.
+                // "hotel_facilities" may appear as a comma-separated string on some hotels.
+                List<String> amenitiesList = new ArrayList<>();
+                JsonNode facilitiesNode = node.path("hotel_facilities");
+                if (facilitiesNode.isTextual() && !facilitiesNode.asText().isBlank()) {
+                    amenitiesList.addAll(Arrays.asList(facilitiesNode.asText().split("\\s*,\\s*")));
+                } else if (facilitiesNode.isArray()) {
+                    facilitiesNode.forEach(f -> {
+                        String name = f.isTextual() ? f.asText() : f.path("name").asText("");
+                        if (!name.isBlank()) amenitiesList.add(name);
+                    });
+                }
+                // Common boolean flags some Booking.com responses include directly on the hotel node
+                if (node.path("has_swimming_pool").asInt(0) == 1) amenitiesList.add("Swimming Pool");
+                if (node.path("is_free_cancellable").asInt(0) == 1) amenitiesList.add("Free Cancellation");
+                hotel.setAmenities(amenitiesList);
+
+                // Distance from city center (km), if provided
+                if (node.has("distance_to_cc")) {
+                    hotel.setDistanceFromCenterKm(node.path("distance_to_cc").asDouble());
+                } else {
+                    hotel.setDistanceFromCenterKm(null);
+                }
+
+                // Free cancellation date text, if provided
+                if (node.path("is_free_cancellable").asInt(0) == 1
+                        && !node.path("free_cancellation_until").asText("").isBlank()) {
+                    hotel.setFreeCancellationUntil(node.path("free_cancellation_until").asText());
+                } else {
+                    hotel.setFreeCancellationUntil(null);
+                }
 
                 // Local Pick badge
                 String hotelName = hotel.getName().toLowerCase();
