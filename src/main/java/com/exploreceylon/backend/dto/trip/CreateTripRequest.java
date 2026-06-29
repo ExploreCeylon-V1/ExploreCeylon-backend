@@ -1,18 +1,26 @@
 package com.exploreceylon.backend.dto.trip;
 
-import com.exploreceylon.backend.model.Trip;
-import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import lombok.Data;
-
 import java.time.LocalDate;
 import java.util.List;
+import com.exploreceylon.backend.model.Trip.TravelStyle;
+import com.exploreceylon.backend.model.Trip.BudgetRange;
 
 @Data
 public class CreateTripRequest {
 
-    @NotBlank(message = "Title is required")
+    // Optional — auto-generate karanawa nattam
+    @Size(max = 200, message = "Title too long")
     private String title;
+
+    // NEW fields — UI eka anuwa
+    @Size(max = 200)
+    private String fromLocation;     // "Heading from"
+
+    @Size(max = 200)
+    private String toLocation;       // "Where to?"
 
     @NotNull(message = "Start date is required")
     private LocalDate startDate;
@@ -20,16 +28,20 @@ public class CreateTripRequest {
     @NotNull(message = "End date is required")
     private LocalDate endDate;
 
-    private Trip.TravelStyle travelStyle;
-    private Trip.BudgetRange budgetRange;
+    private TravelStyle travelStyle;
+
+    private BudgetRange budgetRange;
+
     private Integer groupSize;
 
-    // Preferences
-    private List<String> regions;
-    private List<String> interests;
-    private String startingPoint;
-    private String specialNotes;
+    private Boolean generateWithAi;
 
-    // AI generate?
-    private Boolean generateWithAi = false;
+    // Old fields — backward compat ga thiyanna
+    private List<String> regions;
+
+    private List<String> interests;
+
+    private String startingPoint;
+
+    private String specialNotes;
 }

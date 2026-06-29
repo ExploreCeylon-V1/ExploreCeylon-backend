@@ -11,6 +11,8 @@ import java.util.List;
 public class TripResponse {
     private Long id;
     private String title;
+    private String fromLocation;
+    private String toLocation;
     private LocalDate startDate;
     private LocalDate endDate;
     private Trip.TravelStyle travelStyle;

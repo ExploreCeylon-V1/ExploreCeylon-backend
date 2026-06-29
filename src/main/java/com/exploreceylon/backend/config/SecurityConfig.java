@@ -45,6 +45,7 @@ public class SecurityConfig {
                 .requestMatchers("/api/v1/gems/**").permitAll()
                 .requestMatchers("/api/v1/upload/**").authenticated()
                 .requestMatchers(HttpMethod.GET, "/api/v1/guides/**").permitAll()
+                .requestMatchers(HttpMethod.POST, "/api/v1/guides/*/reviews").authenticated()
                 .requestMatchers(HttpMethod.POST, "/api/v1/guides/**").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.PUT, "/api/v1/guides/**").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.DELETE, "/api/v1/guides/**").hasRole("ADMIN")
