@@ -14,6 +14,9 @@ public interface HiddenGemRepository extends JpaRepository<HiddenGem, Long> {
     // All approved gems
     List<HiddenGem> findByApprovedTrueOrderByRatingDesc();
 
+    // Get by title (used to resolve AI-generated itinerary items back to DB rows)
+    java.util.Optional<HiddenGem> findByTitleIgnoreCase(String title);
+
     // Filter by category
     List<HiddenGem> findByCategoryAndApprovedTrueOrderByRatingDesc(
             HiddenGem.GemCategory category);

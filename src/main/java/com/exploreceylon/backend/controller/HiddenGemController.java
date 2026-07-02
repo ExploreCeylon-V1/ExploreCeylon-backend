@@ -41,6 +41,15 @@ public class HiddenGemController {
         return ResponseEntity.ok(gemService.searchGems(keyword));
     }
 
+    // GET /api/v1/gems/nearby — distance-sorted, for AI trip planning
+    @GetMapping("/nearby")
+    public ResponseEntity<List<GemResponse>> getNearby(
+            @RequestParam Double lat,
+            @RequestParam Double lng,
+            @RequestParam(defaultValue = "10") int limit) {
+        return ResponseEntity.ok(gemService.findNearby(lat, lng, limit));
+    }
+
     // GET /api/v1/gems/pending (Admin)
     @GetMapping("/pending")
     public ResponseEntity<List<GemResponse>> getPendingGems() {

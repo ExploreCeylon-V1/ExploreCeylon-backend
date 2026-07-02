@@ -112,6 +112,7 @@ public class TourGuideService {
         if (req.getPricePerDay()!= null) guide.setPricePerDay(req.getPricePerDay());
         if (req.getPhone()      != null) guide.setPhone(req.getPhone());
         if (req.getEmail()      != null) guide.setEmail(req.getEmail());
+        if (req.getImageUrls()  != null) guide.setImageUrls(req.getImageUrls());
         return toGuideResponse(guideRepository.save(guide));
     }
 

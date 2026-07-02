@@ -12,6 +12,9 @@ import java.util.List;
 @Repository
 public interface EventRepository extends JpaRepository<Event, Long> {
 
+    // Get by title (used to resolve AI-generated itinerary items back to DB rows)
+    java.util.Optional<Event> findByTitleIgnoreCase(String title);
+
     // Filter by category
     List<Event> findByCategoryOrderByStartDate(Event.EventCategory category);
 

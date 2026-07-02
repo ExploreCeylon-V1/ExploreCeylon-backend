@@ -75,12 +75,12 @@ public class AiService {
 
     // ── Budget Estimate ────────────────────────────────────
     public Mono<JsonNode> estimateBudget(
-            Integer days, String travelStyle,
+            Integer days, String budgetRange,
             Integer groupSize, List<String> regions) {
 
         Map<String, Object> body = new HashMap<>();
         body.put("duration_days",  days);
-        body.put("travel_style",   travelStyle);
+        body.put("budget_range",   budgetRange);
         body.put("group_size",     groupSize);
         body.put("regions",        regions);
 

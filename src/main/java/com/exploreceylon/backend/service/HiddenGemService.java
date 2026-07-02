@@ -6,11 +6,13 @@ import com.exploreceylon.backend.model.HiddenGem;
 import com.exploreceylon.backend.model.User;
 import com.exploreceylon.backend.repository.HiddenGemRepository;
 import com.exploreceylon.backend.repository.UserRepository;
+import com.exploreceylon.backend.util.GeoUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
+import java.util.Comparator;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -53,6 +55,18 @@ public class HiddenGemService {
         }
 
         return gems.stream()
+                .map(this::toResponse)
+                .collect(Collectors.toList());
+    }
+
+    // ── Nearby (distance-sorted, for AI trip planning) ─────
+    public List<GemResponse> findNearby(double lat, double lng, int limit) {
+        return gemRepository.findByApprovedTrueOrderByRatingDesc()
+                .stream()
+                .filter(g -> g.getLatitude() != null && g.getLongitude() != null)
+                .sorted(Comparator.comparingDouble(g -> GeoUtils.distanceKm(
+                        lat, lng, g.getLatitude(), g.getLongitude())))
+                .limit(limit)
                 .map(this::toResponse)
                 .collect(Collectors.toList());
     }

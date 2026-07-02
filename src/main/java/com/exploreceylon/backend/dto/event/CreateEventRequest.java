@@ -25,6 +25,9 @@ public class CreateEventRequest {
     @NotBlank(message = "Location is required")
     private String location;
 
+    private Double latitude;
+    private Double longitude;
+
     @NotNull(message = "Start date is required")
     private LocalDate startDate;
 
