@@ -39,6 +39,9 @@ public class Event {
     @Column(nullable = false)
     private String location;
 
+    private Double latitude;
+    private Double longitude;
+
     @Column(nullable = false)
     private LocalDate startDate;
 

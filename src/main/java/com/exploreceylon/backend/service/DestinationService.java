@@ -4,10 +4,12 @@ import com.exploreceylon.backend.dto.destination.CreateDestinationRequest;
 import com.exploreceylon.backend.dto.destination.DestinationResponse;
 import com.exploreceylon.backend.model.Destination;
 import com.exploreceylon.backend.repository.DestinationRepository;
+import com.exploreceylon.backend.util.GeoUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.util.Comparator;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -87,6 +89,19 @@ public class DestinationService {
         return toResponse(dest);
     }
 
+    // ── Nearby (distance-sorted, for AI trip planning) ─────
+    public List<DestinationResponse> findNearby(
+            double lat, double lng, int limit) {
+        return destinationRepository.findByActiveTrueOrderByRatingDesc()
+                .stream()
+                .filter(d -> d.getLatitude() != null && d.getLongitude() != null)
+                .sorted(Comparator.comparingDouble(d -> GeoUtils.distanceKm(
+                        lat, lng, d.getLatitude(), d.getLongitude())))
+                .limit(limit)
+                .map(this::toResponse)
+                .collect(Collectors.toList());
+    }
+
     // ── Search ─────────────────────────────────────────────
     public List<DestinationResponse> search(String keyword) {
         log.info("Searching destinations: {}", keyword);
@@ -144,6 +159,7 @@ public class DestinationService {
         if (req.getLatitude()        != null) dest.setLatitude(req.getLatitude());
         if (req.getLongitude()       != null) dest.setLongitude(req.getLongitude());
         if (req.getCoverImageUrl()   != null) dest.setCoverImageUrl(req.getCoverImageUrl());
+        if (req.getImageUrls()        != null) dest.setImageUrls(req.getImageUrls());
         if (req.getTravelTimeFrom()  != null) dest.setTravelTimeFrom(req.getTravelTimeFrom());
         if (req.getEntryFee()        != null) dest.setEntryFee(req.getEntryFee());
         if (req.getOpeningHours()    != null) dest.setOpeningHours(req.getOpeningHours());

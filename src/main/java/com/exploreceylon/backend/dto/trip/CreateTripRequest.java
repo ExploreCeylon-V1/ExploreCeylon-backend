@@ -30,6 +30,8 @@ public class CreateTripRequest {
 
     private TravelStyle travelStyle;
 
+    private List<TravelStyle> travelStyles;
+
     private BudgetRange budgetRange;
 
     private Integer groupSize;

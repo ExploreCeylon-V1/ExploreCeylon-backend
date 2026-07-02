@@ -46,6 +46,16 @@ public class DestinationController {
                 destinationService.search(keyword));
     }
 
+    // GET /api/v1/destinations/nearby — distance-sorted, for AI trip planning
+    @GetMapping("/nearby")
+    public ResponseEntity<List<DestinationResponse>> getNearby(
+            @RequestParam Double lat,
+            @RequestParam Double lng,
+            @RequestParam(defaultValue = "15") int limit) {
+        return ResponseEntity.ok(
+                destinationService.findNearby(lat, lng, limit));
+    }
+
     // GET /api/v1/destinations/{id}
     @GetMapping("/{id}")
     public ResponseEntity<DestinationResponse> getById(

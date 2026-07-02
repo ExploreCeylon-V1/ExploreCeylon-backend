@@ -14,6 +14,8 @@ public class EventResponse {
     private Event.EventCategory category;
     private String region;
     private String location;
+    private Double latitude;
+    private Double longitude;
     private LocalDate startDate;
     private LocalDate endDate;
     private List<String> imageUrls;
