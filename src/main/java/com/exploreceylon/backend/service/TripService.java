@@ -37,6 +37,9 @@ public class TripService {
     private final DestinationRepository destinationRepository;
     private final HiddenGemRepository   hiddenGemRepository;
     private final EventRepository       eventRepository;
+    private final VehicleBookingRepository vehicleBookingRepository;
+    private final GuideBookingRepository   guideBookingRepository;
+    private final BudgetRepository         budgetRepository;
 
     // Splits a leading name off strings like "Gem Name — description"
     // or "Gem Name - description" as returned by the AI for hiddenGem.
@@ -466,6 +469,23 @@ public class TripService {
 
     // ── Delete Trip ────────────────────────────────────────
     public void deleteTrip(Long id) {
+        // Bookings are kept as historical records — detach them from the
+        // trip instead of deleting, so the FK doesn't block trip deletion.
+        vehicleBookingRepository.findByTripIdOrderByPickupDate(id)
+                .forEach(b -> {
+                    b.setTrip(null);
+                    vehicleBookingRepository.save(b);
+                });
+        guideBookingRepository.findByTripIdOrderByStartDate(id)
+                .forEach(b -> {
+                    b.setTrip(null);
+                    guideBookingRepository.save(b);
+                });
+
+        // The budget (and its items, via cascade) belongs to the trip.
+        budgetRepository.findByTripId(id)
+                .ifPresent(budgetRepository::delete);
+
         tripRepository.deleteById(id);
         log.info("Trip deleted: {}", id);
     }
