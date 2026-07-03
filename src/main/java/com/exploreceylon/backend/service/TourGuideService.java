@@ -25,6 +25,7 @@ public class TourGuideService {
     private final GuideReviewRepository  reviewRepository;
     private final UserRepository         userRepository;
     private final TripRepository         tripRepository;
+    private final BudgetService          budgetService;
 
     // ── Current User ───────────────────────────────────────
     private User getCurrentUser() {
@@ -160,6 +161,18 @@ public class TourGuideService {
         GuideBooking saved = bookingRepository.save(booking);
         log.info("Guide booked: {} by {}", guide.getFullName(),
                 user.getEmail());
+
+        // Feed the trip's budget tracker (no-op if the trip has no budget)
+        if (trip != null) {
+            budgetService.autoAddFromBooking(
+                    trip.getId(),
+                    BudgetItem.ItemCategory.GUIDE,
+                    guide.getFullName() + " (" + days
+                            + (days == 1 ? " day)" : " days)"),
+                    totalCost,
+                    "GB-" + saved.getId(),
+                    req.getStartDate());
+        }
         return toBookingResponse(saved);
     }
 

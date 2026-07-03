@@ -24,6 +24,7 @@ public class VehicleBookingService {
     private final VehicleRepository        vehicleRepository;
     private final UserRepository           userRepository;
     private final TripRepository           tripRepository;
+    private final BudgetService            budgetService;
 
     // ── Current User ───────────────────────────────────────
     private User getCurrentUser() {
@@ -86,6 +87,18 @@ public class VehicleBookingService {
         VehicleBooking saved = bookingRepository.save(booking);
         log.info("Vehicle booked: {} by {} — {} days — ${}",
                 vehicle.getName(), user.getEmail(), days, totalCost);
+
+        // Feed the trip's budget tracker (no-op if the trip has no budget)
+        if (trip != null) {
+            budgetService.autoAddFromBooking(
+                    trip.getId(),
+                    BudgetItem.ItemCategory.VEHICLE,
+                    vehicle.getName() + " (" + days
+                            + (days == 1 ? " day)" : " days)"),
+                    totalCost,
+                    "VB-" + saved.getId(),
+                    req.getPickupDate());
+        }
         return toResponse(saved);
     }
 

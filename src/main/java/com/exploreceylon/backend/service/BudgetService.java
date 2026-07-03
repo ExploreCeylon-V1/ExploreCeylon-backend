@@ -19,10 +19,12 @@ import java.util.stream.Collectors;
 @Transactional
 public class BudgetService {
 
-    private final BudgetRepository     budgetRepository;
-    private final BudgetItemRepository itemRepository;
-    private final UserRepository       userRepository;
-    private final TripRepository       tripRepository;
+    private final BudgetRepository        budgetRepository;
+    private final BudgetItemRepository    itemRepository;
+    private final UserRepository          userRepository;
+    private final TripRepository          tripRepository;
+    private final VehicleBookingRepository vehicleBookingRepository;
+    private final GuideBookingRepository   guideBookingRepository;
 
     // Currency conversion rates (relative to USD)
     private static final Map<String, Double> RATES = Map.of(
@@ -86,6 +88,35 @@ public class BudgetService {
         return toResponse(budgetRepository.save(budget));
     }
 
+    // ── Set Per-Category Allocations ───────────────────────
+    public BudgetResponse updateCategoryBudgets(
+            Long budgetId, Map<String, Double> allocations) {
+        Budget budget = findBudget(budgetId);
+
+        Map<BudgetItem.ItemCategory, Double> parsed = new HashMap<>();
+        for (Map.Entry<String, Double> e : allocations.entrySet()) {
+            BudgetItem.ItemCategory category;
+            try {
+                category = BudgetItem.ItemCategory
+                        .valueOf(e.getKey().toUpperCase());
+            } catch (IllegalArgumentException ex) {
+                throw new RuntimeException(
+                        "Unknown budget category: " + e.getKey());
+            }
+            if (e.getValue() == null || e.getValue() < 0) {
+                throw new RuntimeException(
+                        "Invalid amount for category: " + e.getKey());
+            }
+            parsed.put(category, e.getValue());
+        }
+
+        budget.getCategoryBudgets().clear();
+        budget.getCategoryBudgets().putAll(parsed);
+        Budget saved = budgetRepository.save(budget);
+        log.info("Category budgets updated for budget {}", budgetId);
+        return toResponse(saved);
+    }
+
     // ── Add Item Manually ──────────────────────────────────
     public BudgetItemResponse addItem(Long budgetId,
                                        AddBudgetItemRequest req) {
@@ -116,7 +147,8 @@ public class BudgetService {
                                     BudgetItem.ItemCategory category,
                                     String title,
                                     Double amount,
-                                    String referenceId) {
+                                    String referenceId,
+                                    LocalDate date) {
         Optional<Budget> budgetOpt =
                 budgetRepository.findByTripId(tripId);
 
@@ -141,7 +173,9 @@ public class BudgetService {
                 .title(title)
                 .amount(amount)
                 .currency(budget.getCurrency())
-                .date(LocalDate.now())
+                // The booking's own date, so the expense lands on the right
+                // trip day in the daily spending chart.
+                .date(date != null ? date : LocalDate.now())
                 .autoAdded(true)
                 .referenceId(referenceId)
                 .build();
@@ -149,6 +183,53 @@ public class BudgetService {
         itemRepository.save(item);
         log.info("Auto-added to budget: {} — ${}",
                 title, amount);
+    }
+
+    // ── Repair Auto-Added Item Dates ───────────────────────
+    // One-time backfill for items created before autoAddFromBooking
+    // started recording the booking's real date instead of "today".
+    // Re-derives each auto-added item's date from its referenced
+    // VehicleBooking ("VB-{id}") or GuideBooking ("GB-{id}").
+    public BudgetResponse repairAutoAddedDates(Long budgetId) {
+        Budget budget = findBudget(budgetId);
+        int repaired = 0;
+
+        for (BudgetItem item : budget.getItems()) {
+            if (!Boolean.TRUE.equals(item.getAutoAdded())
+                    || item.getReferenceId() == null) {
+                continue;
+            }
+            String ref = item.getReferenceId();
+            try {
+                if (ref.startsWith("VB-")) {
+                    Long bookingId = Long.parseLong(ref.substring(3));
+                    vehicleBookingRepository.findById(bookingId)
+                            .ifPresent(b -> {
+                                if (!b.getPickupDate().equals(item.getDate())) {
+                                    item.setDate(b.getPickupDate());
+                                    itemRepository.save(item);
+                                }
+                            });
+                    repaired++;
+                } else if (ref.startsWith("GB-")) {
+                    Long bookingId = Long.parseLong(ref.substring(3));
+                    guideBookingRepository.findById(bookingId)
+                            .ifPresent(b -> {
+                                if (!b.getStartDate().equals(item.getDate())) {
+                                    item.setDate(b.getStartDate());
+                                    itemRepository.save(item);
+                                }
+                            });
+                    repaired++;
+                }
+            } catch (NumberFormatException ignored) {
+                // referenceId doesn't match the expected "VB-"/"GB-" + id shape
+            }
+        }
+
+        log.info("Checked {} auto-added items for date repair on budget {}",
+                repaired, budgetId);
+        return toResponse(findBudget(budgetId));
     }
 
     // ── Get Items ──────────────────────────────────────────
@@ -270,6 +351,10 @@ public class BudgetService {
         res.setItems(b.getItems().stream()
                 .map(this::toItemResponse)
                 .collect(Collectors.toList()));
+        Map<String, Double> allocations = new LinkedHashMap<>();
+        b.getCategoryBudgets().forEach(
+                (cat, amount) -> allocations.put(cat.name(), amount));
+        res.setCategoryBudgets(allocations);
         return res;
     }
 
