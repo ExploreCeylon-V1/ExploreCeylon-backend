@@ -25,30 +25,19 @@ public class AiService {
         this.aiWebClient = aiWebClient;
     }
 
-    // ── Generate Itinerary ─────────────────────────────────
-    public Mono<JsonNode> generateItinerary(
-            String startDate, String endDate,
-            String travelStyle, String budgetRange,
-            Integer groupSize, List<String> regions,
-            List<String> interests, String startingPoint,
-            String specialNotes) {
-
-        Map<String, Object> body = new HashMap<>();
-        body.put("start_date",     startDate);
-        body.put("end_date",       endDate);
-        body.put("travel_style",   travelStyle);
-        body.put("budget_range",   budgetRange);
-        body.put("group_size",     groupSize);
-        body.put("regions",        regions);
-        body.put("interests",      interests);
-        body.put("starting_point", startingPoint);
-        if (specialNotes != null)
-            body.put("special_notes", specialNotes);
-
-        log.info("Calling AI service for itinerary generation");
+    // ── Narrative-only generation ──────────────────────────
+    // The backend (ItineraryAssemblyService) now decides the full
+    // day/stop structure — corridor, order, day assignment, referenceId —
+    // deterministically before this is ever called. The AI service's only
+    // remaining job is to write engaging descriptions/tips/title for the
+    // fixed structure passed in `body["days"]`; it must not reorder, add
+    // or remove stops. See ExploreCeylon-ai-service prompt_builder.py
+    // build_narrative_prompt() / routers/itinerary.py "/ai/itinerary/narrate".
+    public Mono<JsonNode> generateNarrative(Map<String, Object> body) {
+        log.info("Calling AI service for narrative-only enrichment");
 
         return aiWebClient.post()
-                .uri("/ai/itinerary/generate")
+                .uri("/ai/itinerary/narrate")
                 .bodyValue(body)
                 .retrieve()
                 .bodyToMono(JsonNode.class)
@@ -73,23 +62,11 @@ public class AiService {
                 .bodyToMono(JsonNode.class);
     }
 
-    // ── Budget Estimate ────────────────────────────────────
-    public Mono<JsonNode> estimateBudget(
-            Integer days, String budgetRange,
-            Integer groupSize, List<String> regions) {
-
-        Map<String, Object> body = new HashMap<>();
-        body.put("duration_days",  days);
-        body.put("budget_range",   budgetRange);
-        body.put("group_size",     groupSize);
-        body.put("regions",        regions);
-
-        return aiWebClient.post()
-                .uri("/ai/budget-estimate")
-                .bodyValue(body)
-                .retrieve()
-                .bodyToMono(JsonNode.class);
-    }
+    // Per-day budget is now computed in Java from real chosen stops
+    // (ItineraryAssemblyService.computeDayCost) instead of this flat
+    // rate-table call — see Phase 5 notes there. The Python
+    // /ai/budget-estimate endpoint still exists for any other generic
+    // estimate use but is no longer part of the trip-generation flow.
 
     // ── Health Check ───────────────────────────────────────
     public Mono<JsonNode> healthCheck() {

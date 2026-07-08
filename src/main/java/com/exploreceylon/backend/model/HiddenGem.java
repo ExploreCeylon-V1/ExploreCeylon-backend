@@ -46,6 +46,25 @@ public class HiddenGem {
     @Column(length = 1000)
     private String tips;
 
+    // Comma separated, same convention as Destination.bestMonths — months
+    // this gem is best visited in. Nullable — NULL means "any season".
+    private String seasonMonths;
+
+    // Comma separated travel-style tags, same convention as
+    // Destination.travelStyleTags.
+    private String travelStyleTags;
+
+    // Nullable — NULL means "fits any budget tier".
+    @Enumerated(EnumType.STRING)
+    private com.exploreceylon.backend.model.BudgetLevel budgetLevel;
+
+    // Numeric entry fee in USD, nullable — see Destination.entryFeeUsd.
+    private Double entryFeeUsd;
+
+    // Typical visit duration in minutes, nullable — see
+    // Destination.visitDurationMinutes.
+    private Integer visitDurationMinutes;
+
     @ElementCollection
     @CollectionTable(
         name = "gem_images",

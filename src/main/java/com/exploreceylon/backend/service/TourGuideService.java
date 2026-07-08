@@ -39,6 +39,15 @@ public class TourGuideService {
     public List<GuideResponse> getAllGuides(
             String district, String language,
             String specialty, Double maxPrice) {
+        return getAllGuides(district, language, specialty, maxPrice, null, null);
+    }
+
+    // Overload — when startDate/endDate are both given, guides with an active
+    // booking overlapping that range are excluded from the results.
+    public List<GuideResponse> getAllGuides(
+            String district, String language,
+            String specialty, Double maxPrice,
+            LocalDate startDate, LocalDate endDate) {
 
         List<TourGuide> guides;
 
@@ -60,6 +69,13 @@ public class TourGuideService {
         } else {
             guides = guideRepository
                     .findByVerifiedTrueAndAvailableTrueOrderByRatingDesc();
+        }
+
+        if (startDate != null && endDate != null) {
+            List<Long> bookedIds = bookingRepository.findBookedGuideIds(startDate, endDate);
+            guides = guides.stream()
+                    .filter(g -> !bookedIds.contains(g.getId()))
+                    .collect(Collectors.toList());
         }
 
         return guides.stream()
@@ -92,6 +108,7 @@ public class TourGuideService {
                 .district(req.getDistrict())
                 .pricePerDay(req.getPricePerDay())
                 .phone(req.getPhone())
+                .whatsappNumber(req.getWhatsappNumber())
                 .email(req.getEmail())
                 .imageUrls(req.getImageUrls() != null
                         ? req.getImageUrls() : List.of())
@@ -112,6 +129,7 @@ public class TourGuideService {
         if (req.getDistrict()   != null) guide.setDistrict(req.getDistrict());
         if (req.getPricePerDay()!= null) guide.setPricePerDay(req.getPricePerDay());
         if (req.getPhone()      != null) guide.setPhone(req.getPhone());
+        if (req.getWhatsappNumber() != null) guide.setWhatsappNumber(req.getWhatsappNumber());
         if (req.getEmail()      != null) guide.setEmail(req.getEmail());
         if (req.getImageUrls()  != null) guide.setImageUrls(req.getImageUrls());
         return toGuideResponse(guideRepository.save(guide));
@@ -139,6 +157,8 @@ public class TourGuideService {
         long days = ChronoUnit.DAYS.between(
                 req.getStartDate(), req.getEndDate()) + 1;
         double totalCost = guide.getPricePerDay() * days;
+        double advanceAmount = Math.round(totalCost * 0.20 * 100.0) / 100.0;
+        double balanceAmount = Math.round((totalCost - advanceAmount) * 100.0) / 100.0;
 
         // Get trip if provided
         Trip trip = null;
@@ -154,8 +174,10 @@ public class TourGuideService {
                 .startDate(req.getStartDate())
                 .endDate(req.getEndDate())
                 .totalCost(totalCost)
+                .advanceAmount(advanceAmount)
+                .balanceAmount(balanceAmount)
                 .notes(req.getNotes())
-                .status(GuideBooking.BookingStatus.CONFIRMED)
+                .status(GuideBooking.BookingStatus.PENDING_PAYMENT)
                 .build();
 
         GuideBooking saved = bookingRepository.save(booking);
@@ -184,6 +206,23 @@ public class TourGuideService {
                 .stream()
                 .map(this::toBookingResponse)
                 .collect(Collectors.toList());
+    }
+
+    // ── Booking Detail (with ownership check) ──────────────
+    public GuideBookingResponse getBookingById(Long id) {
+        User user = getCurrentUser();
+        GuideBooking booking = bookingRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Booking not found: " + id));
+        if (!booking.getUser().getId().equals(user.getId())) {
+            throw new RuntimeException("Not your booking");
+        }
+        return toBookingResponse(booking);
+    }
+
+    // ── Check Availability ─────────────────────────────────
+    public boolean checkAvailability(Long guideId, LocalDate start, LocalDate end) {
+        findGuide(guideId);
+        return bookingRepository.countOverlappingBookings(guideId, start, end) == 0;
     }
 
     // ── Get Guide Bookings ─────────────────────────────────
@@ -263,6 +302,7 @@ public class TourGuideService {
         res.setRating(g.getRating());
         res.setReviewCount(g.getReviewCount());
         res.setPhone(g.getPhone());
+        res.setWhatsappNumber(g.getWhatsappNumber());
         res.setEmail(g.getEmail());
         res.setImageUrls(g.getImageUrls());
         return res;
@@ -280,6 +320,8 @@ public class TourGuideService {
         res.setEndDate(b.getEndDate());
         res.setStatus(b.getStatus());
         res.setTotalCost(b.getTotalCost());
+        res.setAdvanceAmount(b.getAdvanceAmount());
+        res.setBalanceAmount(b.getBalanceAmount());
         res.setNotes(b.getNotes());
         res.setCreatedAt(b.getCreatedAt());
         return res;

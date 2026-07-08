@@ -42,6 +42,8 @@ public class Vehicle {
 
     private String driverName;
     private String driverPhone;
+    // Raw WhatsApp number, no '+' or spaces, e.g. "94771234567"
+    private String whatsappNumber;
     private String driverLanguages;
 
     private Boolean driverIncluded = false;

@@ -28,15 +28,24 @@ public class TourGuideController {
     // ── Guide Endpoints ────────────────────────────────────
 
     // GET /api/v1/guides
+    // startDate/endDate (optional, both required together) exclude guides with
+    // an active booking overlapping that range, so only guides free for the
+    // traveler's trip dates are returned.
     @GetMapping("/api/v1/guides")
     public ResponseEntity<List<GuideResponse>> getAllGuides(
             @RequestParam(required = false) String district,
             @RequestParam(required = false) String language,
             @RequestParam(required = false) String specialty,
-            @RequestParam(required = false) Double maxPrice) {
+            @RequestParam(required = false) Double maxPrice,
+            @RequestParam(required = false)
+            @org.springframework.format.annotation.DateTimeFormat(
+                    iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam(required = false)
+            @org.springframework.format.annotation.DateTimeFormat(
+                    iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) LocalDate endDate) {
         return ResponseEntity.ok(
                 guideService.getAllGuides(
-                        district, language, specialty, maxPrice));
+                        district, language, specialty, maxPrice, startDate, endDate));
     }
 
     // GET /api/v1/guides/{id}
@@ -58,6 +67,18 @@ public class TourGuideController {
     public ResponseEntity<List<ReviewResponse>> getReviews(
             @PathVariable Long id) {
         return ResponseEntity.ok(guideService.getGuideReviews(id));
+    }
+
+    // GET /api/v1/guides/{id}/availability?startDate&endDate → {available}
+    @GetMapping("/api/v1/guides/{id}/availability")
+    public ResponseEntity<Map<String, Boolean>> checkAvailability(
+            @PathVariable Long id,
+            @RequestParam @org.springframework.format.annotation.DateTimeFormat(
+                    iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam @org.springframework.format.annotation.DateTimeFormat(
+                    iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) LocalDate endDate) {
+        boolean available = guideService.checkAvailability(id, startDate, endDate);
+        return ResponseEntity.ok(Map.of("available", available));
     }
 
     // POST /api/v1/guides (Admin)
@@ -118,12 +139,28 @@ public class TourGuideController {
         return ResponseEntity.ok(guideService.getMyBookings());
     }
 
+    // GET /api/v1/guide-bookings/{id}
+    @GetMapping("/api/v1/guide-bookings/{id}")
+    public ResponseEntity<GuideBookingResponse> getBookingById(
+            @PathVariable Long id) {
+        return ResponseEntity.ok(guideService.getBookingById(id));
+    }
+
     // GET /api/v1/guides/{id}/bookings
     @GetMapping("/api/v1/guides/{id}/bookings")
     public ResponseEntity<List<GuideBookingResponse>> getGuideBookings(
             @PathVariable Long id) {
         return ResponseEntity.ok(guideService.getGuideBookingsByGuideId(id));
     }
+
+    /* ─────────────────────────────────────────────────────────────────────
+     * TEMPORARILY DISABLED — 2026-07-06
+     * These admin guide-payout endpoints depended on the OLD GuidePayment model
+     * (guideId / totalEarned / amountPaid / paymentDate / status PAID|UNPAID).
+     * The payment refactor repurposed GuidePayment into a per-booking traveler
+     * payment (guideBooking / amount / guidePayout / phases / PENDING|COMPLETED),
+     * so this admin payout ledger now needs its own model. Rebuild in the
+     * payment pass. Commented out to keep the backend compiling.
 
     // GET /api/v1/guide-payments/completed-summary
     @GetMapping("/api/v1/guide-payments/completed-summary")
@@ -192,4 +229,5 @@ public class TourGuideController {
 
         return ResponseEntity.ok(response);
     }
+    * ───────────────────────────────────────────────────────────────────── */
 }

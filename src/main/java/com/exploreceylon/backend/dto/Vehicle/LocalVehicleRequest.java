@@ -2,6 +2,8 @@ package com.exploreceylon.backend.dto.vehicle;
 
 import lombok.Data;
 
+import java.time.LocalDate;
+
 @Data
 public class LocalVehicleRequest {
     private String district;
@@ -10,4 +12,8 @@ public class LocalVehicleRequest {
     private Double maxPrice;
     private Boolean driverIncluded;
     private Boolean airportTransfer;
+
+    // When both given, excludes vehicles with an active booking overlapping the range.
+    private LocalDate startDate;
+    private LocalDate endDate;
 }

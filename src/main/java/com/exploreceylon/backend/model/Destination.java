@@ -65,7 +65,28 @@ public class Destination {
     private String travelTimeFrom;
 
     private String entryFee;
+
+    // Numeric entry fee in USD, used by real per-day budget estimation
+    // (ExploreCeylon-ai-service flat-rate estimate is being replaced by
+    // this). Nullable — unbackfilled rows just contribute $0 to the sum,
+    // they are never excluded from candidate selection for missing data.
+    private Double entryFeeUsd;
+
     private String openingHours;
+
+    // Typical time a visitor spends here, used to pack stops into a day
+    // during deterministic itinerary assembly. Nullable — falls back to a
+    // per-category default (see ItineraryAssemblyService) when absent.
+    private Integer visitDurationMinutes;
+
+    // Nullable — NULL means "fits any budget tier", never used to exclude
+    // a candidate from corridor filtering.
+    @Enumerated(EnumType.STRING)
+    private BudgetLevel budgetLevel;
+
+    // Comma separated travel-style tags, e.g. "ADVENTURE,WILDLIFE" — same
+    // free-text CSV convention as `activities`/`bestMonths` above.
+    private String travelStyleTags;
 
     @Builder.Default
     private Boolean featured = false;

@@ -23,6 +23,7 @@ public class AdminVehicleRequest {
     private Double longitude;
     private String driverName;
     private String driverPhone;
+    private String whatsappNumber;
     private String driverLanguages;
     private Boolean driverIncluded;
     private Boolean airportTransfer;

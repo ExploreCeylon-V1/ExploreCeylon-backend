@@ -22,6 +22,8 @@ public class VehicleBookingResponse {
     private String dropoffLocation;
     private VehicleBooking.BookingStatus status;
     private Double totalCost;
+    private Double advanceAmount;
+    private Double balanceAmount;
     private String notes;
     private LocalDateTime createdAt;
 }

@@ -1,13 +1,23 @@
 package com.exploreceylon.backend.service;
 
+import com.exploreceylon.backend.dto.vehicle.CreateVehicleReviewRequest;
 import com.exploreceylon.backend.dto.vehicle.LocalVehicleRequest;
 import com.exploreceylon.backend.dto.vehicle.LocalVehicleResponse;
+import com.exploreceylon.backend.dto.vehicle.VehicleReviewResponse;
+import com.exploreceylon.backend.model.User;
 import com.exploreceylon.backend.model.Vehicle;
+import com.exploreceylon.backend.model.VehicleBooking;
+import com.exploreceylon.backend.model.VehicleReview;
+import com.exploreceylon.backend.repository.VehicleBookingRepository;
 import com.exploreceylon.backend.repository.VehicleRepository;
+import com.exploreceylon.backend.repository.VehicleReviewRepository;
+import com.exploreceylon.backend.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -16,7 +26,18 @@ import java.util.stream.Collectors;
 @Slf4j
 public class LocalVehicleService {
 
-    private final VehicleRepository vehicleRepository;
+    private final VehicleRepository        vehicleRepository;
+    private final VehicleReviewRepository  reviewRepository;
+    private final VehicleBookingRepository bookingRepository;
+    private final UserRepository           userRepository;
+
+    // ── Current User ───────────────────────────────────────
+    private User getCurrentUser() {
+        String email = SecurityContextHolder.getContext()
+                .getAuthentication().getName();
+        return userRepository.findByEmail(email)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+    }
 
     // ── Search Vehicles ────────────────────────────────────────
     public List<LocalVehicleResponse> searchVehicles(LocalVehicleRequest request) {
@@ -61,6 +82,8 @@ public class LocalVehicleService {
                     .collect(Collectors.toList());
         }
 
+        vehicles = filterByAvailability(vehicles, request.getStartDate(), request.getEndDate());
+
         log.info("Found {} local vehicles", vehicles.size());
         return vehicles.stream()
                 .map(this::toResponse)
@@ -69,8 +92,14 @@ public class LocalVehicleService {
 
     // ── Get All Vehicles ───────────────────────────────────────
     public List<LocalVehicleResponse> getAllVehicles() {
-        return vehicleRepository.findAll()
-                .stream()
+        return getAllVehicles(null, null);
+    }
+
+    // When startDate/endDate are both given, vehicles with an active booking
+    // overlapping that range are excluded from the results.
+    public List<LocalVehicleResponse> getAllVehicles(LocalDate startDate, LocalDate endDate) {
+        List<Vehicle> vehicles = filterByAvailability(vehicleRepository.findAll(), startDate, endDate);
+        return vehicles.stream()
                 .map(this::toResponse)
                 .collect(Collectors.toList());
     }
@@ -85,19 +114,39 @@ public class LocalVehicleService {
 
     // ── Get TukTuks ───────────────────────────────────────────
     public List<LocalVehicleResponse> getTukTuks() {
-        return vehicleRepository
-                .findByTypeAndAvailableTrue(Vehicle.VehicleType.TUKTUK)
-                .stream()
+        return getTukTuks(null, null);
+    }
+
+    public List<LocalVehicleResponse> getTukTuks(LocalDate startDate, LocalDate endDate) {
+        List<Vehicle> vehicles = filterByAvailability(
+                vehicleRepository.findByTypeAndAvailableTrue(Vehicle.VehicleType.TUKTUK),
+                startDate, endDate);
+        return vehicles.stream()
                 .map(this::toResponse)
                 .collect(Collectors.toList());
     }
 
     // ── Get Airport Transfers ──────────────────────────────────
     public List<LocalVehicleResponse> getAirportTransfers() {
-        return vehicleRepository
-                .findByAirportTransferTrueAndAvailableTrue()
-                .stream()
+        return getAirportTransfers(null, null);
+    }
+
+    public List<LocalVehicleResponse> getAirportTransfers(LocalDate startDate, LocalDate endDate) {
+        List<Vehicle> vehicles = filterByAvailability(
+                vehicleRepository.findByAirportTransferTrueAndAvailableTrue(),
+                startDate, endDate);
+        return vehicles.stream()
                 .map(this::toResponse)
+                .collect(Collectors.toList());
+    }
+
+    // Excludes vehicles with an active (PENDING_PAYMENT/CONFIRMED) booking
+    // overlapping [start, end]. No-op when either date is missing.
+    private List<Vehicle> filterByAvailability(List<Vehicle> vehicles, LocalDate start, LocalDate end) {
+        if (start == null || end == null) return vehicles;
+        List<Long> bookedIds = bookingRepository.findBookedVehicleIds(start, end);
+        return vehicles.stream()
+                .filter(v -> !bookedIds.contains(v.getId()))
                 .collect(Collectors.toList());
     }
 
@@ -138,6 +187,7 @@ public class LocalVehicleService {
         existingVehicle.setLongitude(updatedVehicle.getLongitude());
         existingVehicle.setDriverName(updatedVehicle.getDriverName());
         existingVehicle.setDriverPhone(updatedVehicle.getDriverPhone());
+        existingVehicle.setWhatsappNumber(updatedVehicle.getWhatsappNumber());
         existingVehicle.setDriverLanguages(updatedVehicle.getDriverLanguages());
         existingVehicle.setDriverIncluded(updatedVehicle.getDriverIncluded());
         existingVehicle.setAirportTransfer(updatedVehicle.getAirportTransfer());
@@ -167,6 +217,59 @@ public class LocalVehicleService {
         vehicleRepository.save(vehicle);
     }
 
+    // ── Write Review ───────────────────────────────────────────
+    public VehicleReviewResponse writeReview(Long vehicleId, CreateVehicleReviewRequest req) {
+        User user = getCurrentUser();
+        Vehicle vehicle = vehicleRepository.findById(vehicleId)
+                .orElseThrow(() -> new RuntimeException("Vehicle not found: " + vehicleId));
+
+        VehicleBooking booking = null;
+        if (req.getBookingId() != null) {
+            booking = bookingRepository.findById(req.getBookingId()).orElse(null);
+        }
+
+        VehicleReview review = VehicleReview.builder()
+                .vehicle(vehicle)
+                .user(user)
+                .booking(booking)
+                .rating(req.getRating())
+                .comment(req.getComment())
+                .build();
+
+        reviewRepository.save(review);
+
+        // Update vehicle average rating
+        Double avgRating = reviewRepository.findAverageRatingByVehicleId(vehicleId);
+        Long count = reviewRepository.countByVehicleId(vehicleId);
+        vehicle.setRating(avgRating != null ? Math.round(avgRating * 10.0) / 10.0 : 0.0);
+        vehicle.setReviewCount(count.intValue());
+        vehicleRepository.save(vehicle);
+
+        log.info("Review added for vehicle: {}", vehicle.getName());
+        return toReviewResponse(review, user);
+    }
+
+    // ── Get Vehicle Reviews ──────────────────────────────────────
+    public List<VehicleReviewResponse> getVehicleReviews(Long vehicleId) {
+        return reviewRepository
+                .findByVehicleIdOrderByCreatedAtDesc(vehicleId)
+                .stream()
+                .map(r -> toReviewResponse(r, r.getUser()))
+                .collect(Collectors.toList());
+    }
+
+    private VehicleReviewResponse toReviewResponse(VehicleReview r, User user) {
+        VehicleReviewResponse res = new VehicleReviewResponse();
+        res.setId(r.getId());
+        res.setVehicleId(r.getVehicle().getId());
+        res.setUserId(user.getId());
+        res.setUserName(user.getName());
+        res.setRating(r.getRating());
+        res.setComment(r.getComment());
+        res.setCreatedAt(r.getCreatedAt());
+        return res;
+    }
+
     // ── Map Entity → Response ──────────────────────────────────
     private LocalVehicleResponse toResponse(Vehicle v) {
         LocalVehicleResponse res = new LocalVehicleResponse();
@@ -190,6 +293,7 @@ public class LocalVehicleService {
         res.setAirportTransfer(v.getAirportTransfer());
         res.setDriverName(v.getDriverName());
         res.setDriverPhone(v.getDriverPhone());
+        res.setWhatsappNumber(v.getWhatsappNumber());
         res.setDriverLanguages(v.getDriverLanguages());
         res.setDescription(v.getDescription());
         res.setImageUrls(v.getImageUrls());

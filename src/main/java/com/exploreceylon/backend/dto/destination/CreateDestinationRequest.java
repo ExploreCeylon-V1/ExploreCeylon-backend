@@ -37,4 +37,8 @@ public class CreateDestinationRequest {
     private Boolean active;
     private String unescoStatus;
     private String nearbyGems;
+    private Double entryFeeUsd;
+    private Integer visitDurationMinutes;
+    private com.exploreceylon.backend.model.BudgetLevel budgetLevel;
+    private String travelStyleTags;
 }

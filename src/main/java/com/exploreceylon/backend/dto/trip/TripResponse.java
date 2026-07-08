@@ -18,6 +18,7 @@ public class TripResponse {
     private Trip.TravelStyle travelStyle;
     private Trip.BudgetRange budgetRange;
     private Integer groupSize;
+    private Double budgetAmountLkr;
     private Trip.TripStatus status;
     private Boolean aiGenerated;
     private String shareToken;

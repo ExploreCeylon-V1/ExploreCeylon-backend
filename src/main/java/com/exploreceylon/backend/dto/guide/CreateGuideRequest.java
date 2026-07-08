@@ -27,6 +27,7 @@ public class CreateGuideRequest {
     private Double pricePerDay;
 
     private String phone;
+    private String whatsappNumber;
     private String email;
     private List<String> imageUrls;
 }

@@ -5,7 +5,11 @@ import com.exploreceylon.backend.dto.auth.AuthResponse;
 import com.exploreceylon.backend.dto.auth.LoginRequest;
 import com.exploreceylon.backend.dto.auth.RegisterRequest;
 import com.exploreceylon.backend.dto.auth.GoogleLoginRequest;
+import com.exploreceylon.backend.exception.RateLimitException;
+import com.exploreceylon.backend.model.LoginHistory;
+import com.exploreceylon.backend.model.RefreshToken;
 import com.exploreceylon.backend.model.User;
+import com.exploreceylon.backend.model.VerificationCode.CodeType;
 import com.exploreceylon.backend.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -20,7 +24,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
 import java.util.Map;
-import java.util.UUID;
+
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -30,8 +34,12 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final AuthenticationManager authenticationManager;
+    private final RefreshTokenService refreshTokenService;
+    private final LoginHistoryService loginHistoryService;
+    private final VerificationService verificationService;
+    private final RestTemplate restTemplate;
 
-    public AuthResponse register(RegisterRequest request) {
+    public AuthResponse register(RegisterRequest request, String ipAddress, String deviceInfo) {
         log.info("Registering new user: {}", request.getEmail());
 
         if (userRepository.existsByEmail(request.getEmail())) {
@@ -52,6 +60,7 @@ public class AuthService {
                 .email(request.getEmail())
                 .password(passwordEncoder.encode(request.getPassword()))
                 .role(role)
+                .authProvider(User.AuthProvider.LOCAL)
                 .nationality(request.getNationality())
                 .language(request.getLanguage() != null ? request.getLanguage() : "en")
                 .phone(request.getPhone())
@@ -60,21 +69,10 @@ public class AuthService {
         userRepository.save(user);
         log.info("User registered successfully: {}", user.getEmail());
 
-        String accessToken = jwtService.generateToken(user);
-        String refreshToken = jwtService.generateRefreshToken(user);
-
-        return AuthResponse.builder()
-                .accessToken(accessToken)
-                .refreshToken(refreshToken)
-                .tokenType("Bearer")
-                .userId(user.getId())
-                .name(user.getName())
-                .email(user.getEmail())
-                .role(user.getRole().name())
-                .build();
+        return buildAuthResponse(user, LoginHistory.LoginType.LOCAL, ipAddress, deviceInfo);
     }
 
-    public AuthResponse login(LoginRequest request) {
+    public AuthResponse login(LoginRequest request, String ipAddress, String deviceInfo) {
         log.info("Login attempt: {}", request.getEmail());
 
         authenticationManager.authenticate(
@@ -87,36 +85,27 @@ public class AuthService {
         User user = userRepository.findByEmail(request.getEmail())
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
-        String accessToken = jwtService.generateToken(user);
-        String refreshToken = jwtService.generateRefreshToken(user);
-
         log.info("Login successful: {}", user.getEmail());
 
-        return AuthResponse.builder()
-                .accessToken(accessToken)
-                .refreshToken(refreshToken)
-                .tokenType("Bearer")
-                .userId(user.getId())
-                .name(user.getName())
-                .email(user.getEmail())
-                .role(user.getRole().name())
-                .build();
+        loginHistoryService.record(user, LoginHistory.LoginType.LOCAL, ipAddress, deviceInfo);
+        return buildAuthResponse(user, LoginHistory.LoginType.LOCAL, ipAddress, deviceInfo);
     }
 
-    // ─── Aluth Google Login Logic eka ───
-    public AuthResponse googleLogin(GoogleLoginRequest request) {
+    // ─── Google Login / Account Linking ───
+    // email not found          -> create new GOOGLE user
+    // email found, no googleId -> link this Google account to the existing user (keeps
+    //                             their current authProvider/password untouched)
+    // email found, googleId set-> normal login, no duplicate created
+    public AuthResponse googleLogin(GoogleLoginRequest request, String ipAddress, String deviceInfo) {
         log.info("Google login attempt");
 
-        RestTemplate restTemplate = new RestTemplate();
         String googleUserInfoUrl = "https://www.googleapis.com/oauth2/v3/userinfo";
 
-        // Google Access Token eka header ekata danawa
         HttpHeaders headers = new HttpHeaders();
         headers.setBearerAuth(request.getToken());
         HttpEntity<String> entity = new HttpEntity<>("", headers);
 
         try {
-            // Google API eken User data gannawa
             ResponseEntity<Map> response = restTemplate.exchange(googleUserInfoUrl, HttpMethod.GET, entity, Map.class);
             Map<String, Object> userInfo = response.getBody();
 
@@ -127,41 +116,126 @@ public class AuthService {
             String email = (String) userInfo.get("email");
             String name = (String) userInfo.get("name");
             String picture = (String) userInfo.get("picture");
+            String googleId = (String) userInfo.get("sub");
 
-            // User database eke innawada kiyala balanawa, nathnam auto register karanawa
-            User user = userRepository.findByEmail(email).orElseGet(() -> {
+            User user = userRepository.findByEmail(email).map(existing -> {
+                if (existing.getGoogleId() == null) {
+                    log.info("Linking Google account to existing {} user: {}", existing.getAuthProvider(), email);
+                    existing.setGoogleId(googleId);
+                    userRepository.save(existing);
+                }
+                return existing;
+            }).orElseGet(() -> {
                 log.info("Creating new user from Google Login: {}", email);
                 User newUser = User.builder()
                         .name(name)
                         .email(email)
-                        // Google account eken ena nisa random security password ekak danawa
-                        .password(passwordEncoder.encode(UUID.randomUUID().toString()))
+                        // No password yet — Google users set one later via "Create Password".
+                        .googleId(googleId)
+                        .authProvider(User.AuthProvider.GOOGLE)
                         .role(User.Role.TRAVELER)
                         .profilePhoto(picture)
-                        .language("en") // Default language
+                        .language("en")
+                        .emailVerified(true) // Google already verified this address
                         .build();
                 return userRepository.save(newUser);
             });
 
-            // ExploreCeylon eke standard JWT tokens generate karanawa
-            String accessToken = jwtService.generateToken(user);
-            String refreshToken = jwtService.generateRefreshToken(user);
+            if (!user.isEnabled()) {
+                throw new RuntimeException("This account has been deactivated");
+            }
 
             log.info("Google Login successful: {}", email);
 
-            return AuthResponse.builder()
-                    .accessToken(accessToken)
-                    .refreshToken(refreshToken)
-                    .tokenType("Bearer")
-                    .userId(user.getId())
-                    .name(user.getName())
-                    .email(user.getEmail())
-                    .role(user.getRole().name())
-                    .build();
+            loginHistoryService.record(user, LoginHistory.LoginType.GOOGLE, ipAddress, deviceInfo);
+            return buildAuthResponse(user, LoginHistory.LoginType.GOOGLE, ipAddress, deviceInfo);
 
+        } catch (RuntimeException e) {
+            throw e;
         } catch (Exception e) {
             log.error("Google token verification failed", e);
             throw new RuntimeException("Invalid Google token. Sign in failed.");
         }
+    }
+
+    // ─── Refresh / Logout ───
+    public AuthResponse refreshAccessToken(String token) {
+        RefreshToken refreshToken = refreshTokenService.verifyAndGet(token);
+        User user = refreshToken.getUser();
+
+        String accessToken = jwtService.generateToken(user);
+
+        return AuthResponse.builder()
+                .accessToken(accessToken)
+                .refreshToken(refreshToken.getToken())
+                .tokenType("Bearer")
+                .userId(user.getId())
+                .name(user.getName())
+                .email(user.getEmail())
+                .role(user.getRole().name())
+                .build();
+    }
+
+    public void logout(String refreshToken) {
+        refreshTokenService.revoke(refreshToken);
+    }
+
+    // ─── Forgot Password / Reset ───
+    // Never reveals whether the email exists: an unknown email silently no-ops, and
+    // a rate-limit hit on a known email is swallowed too (surfacing it would leak
+    // existence via timing/status-code differences). Works identically for LOCAL and
+    // GOOGLE-without-password users — resetPassword() never touches authProvider.
+    public void forgotPassword(String email) {
+        userRepository.findByEmail(email).ifPresent(user -> {
+            try {
+                verificationService.generateAndSend(user, CodeType.PASSWORD_RESET);
+                log.info("Password reset code requested for {}", email);
+            } catch (RateLimitException e) {
+                log.warn("Password reset request rate-limited for {}", email);
+            }
+        });
+    }
+
+    // Pre-check only — does NOT consume the code, so the same code can still be
+    // spent by resetPassword() right after. Returns false uniformly for an unknown
+    // email or a wrong/expired/used code, so neither leaks which one it was.
+    public boolean verifyResetCode(String email, String code) {
+        return userRepository.findByEmail(email)
+                .map(user -> verificationService.checkOnly(user, CodeType.PASSWORD_RESET, code))
+                .orElse(false);
+    }
+
+    public void resetPassword(String email, String code, String newPassword) {
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new RuntimeException("Invalid or expired code"));
+
+        boolean valid = verificationService.verify(user, CodeType.PASSWORD_RESET, code);
+        if (!valid) {
+            throw new RuntimeException("Invalid or expired code");
+        }
+
+        User managed = userRepository.findById(user.getId()).orElseThrow();
+        managed.setPassword(passwordEncoder.encode(newPassword)); // authProvider left untouched
+        userRepository.save(managed);
+
+        refreshTokenService.revokeAllForUser(managed); // force re-login everywhere
+        log.info("Password reset completed for {}", email);
+    }
+
+    // ─── Shared helpers ───
+    private AuthResponse buildAuthResponse(User user, LoginHistory.LoginType loginType,
+                                            String ipAddress, String deviceInfo) {
+        String accessToken = jwtService.generateToken(user);
+        RefreshToken refreshToken = refreshTokenService.createRefreshToken(user, loginType, ipAddress, deviceInfo);
+
+        return AuthResponse.builder()
+                .accessToken(accessToken)
+                .refreshToken(refreshToken.getToken())
+                .tokenType("Bearer")
+                .userId(user.getId())
+                .name(user.getName())
+                .email(user.getEmail())
+                .role(user.getRole().name())
+                .build();
     }
 }
