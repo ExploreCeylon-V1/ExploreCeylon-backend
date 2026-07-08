@@ -36,6 +36,8 @@ public class CreateTripRequest {
 
     private Integer groupSize;
 
+    private Double budgetAmountLkr;
+
     private Boolean generateWithAi;
 
     // Old fields — backward compat ga thiyanna

@@ -4,12 +4,10 @@ import com.exploreceylon.backend.dto.destination.CreateDestinationRequest;
 import com.exploreceylon.backend.dto.destination.DestinationResponse;
 import com.exploreceylon.backend.model.Destination;
 import com.exploreceylon.backend.repository.DestinationRepository;
-import com.exploreceylon.backend.util.GeoUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
-import java.util.Comparator;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -90,14 +88,13 @@ public class DestinationService {
     }
 
     // ── Nearby (distance-sorted, for AI trip planning) ─────
+    // Pushed to a SQL-level haversine ORDER BY (DestinationRepository
+    // .findNearestTo) instead of loading every active row into Java and
+    // sorting there — see repository for the query.
     public List<DestinationResponse> findNearby(
             double lat, double lng, int limit) {
-        return destinationRepository.findByActiveTrueOrderByRatingDesc()
+        return destinationRepository.findNearestTo(lat, lng, limit)
                 .stream()
-                .filter(d -> d.getLatitude() != null && d.getLongitude() != null)
-                .sorted(Comparator.comparingDouble(d -> GeoUtils.distanceKm(
-                        lat, lng, d.getLatitude(), d.getLongitude())))
-                .limit(limit)
                 .map(this::toResponse)
                 .collect(Collectors.toList());
     }
@@ -137,6 +134,10 @@ public class DestinationService {
                 .unescoStatus(req.getUnescoStatus())
                 .nearbyGems(req.getNearbyGems())
                 .active(req.getActive() != null ? req.getActive() : true)
+                .entryFeeUsd(req.getEntryFeeUsd())
+                .visitDurationMinutes(req.getVisitDurationMinutes())
+                .budgetLevel(req.getBudgetLevel())
+                .travelStyleTags(req.getTravelStyleTags())
                 .build();
         return toResponse(destinationRepository.save(dest));
     }
@@ -167,6 +168,10 @@ public class DestinationService {
         if (req.getUnescoStatus()    != null) dest.setUnescoStatus(req.getUnescoStatus());
         if (req.getNearbyGems()      != null) dest.setNearbyGems(req.getNearbyGems());
         if (req.getActive()          != null) dest.setActive(req.getActive());
+        if (req.getEntryFeeUsd()     != null) dest.setEntryFeeUsd(req.getEntryFeeUsd());
+        if (req.getVisitDurationMinutes() != null) dest.setVisitDurationMinutes(req.getVisitDurationMinutes());
+        if (req.getBudgetLevel()     != null) dest.setBudgetLevel(req.getBudgetLevel());
+        if (req.getTravelStyleTags() != null) dest.setTravelStyleTags(req.getTravelStyleTags());
 
         return toResponse(destinationRepository.save(dest));
     }
@@ -215,6 +220,10 @@ public class DestinationService {
         res.setReviewCount(d.getReviewCount());
         res.setUnescoStatus(d.getUnescoStatus());
         res.setNearbyGems(d.getNearbyGems());
+        res.setEntryFeeUsd(d.getEntryFeeUsd());
+        res.setVisitDurationMinutes(d.getVisitDurationMinutes());
+        res.setBudgetLevel(d.getBudgetLevel());
+        res.setTravelStyleTags(d.getTravelStyleTags());
         return res;
     }
 

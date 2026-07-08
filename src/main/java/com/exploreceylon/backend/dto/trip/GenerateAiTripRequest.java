@@ -26,6 +26,8 @@ public class GenerateAiTripRequest {
     @NotNull(message = "Group size is required")
     private Integer groupSize;
 
+    private Double budgetAmountLkr;
+
     private List<String> regions;
     private List<String> interests;
     private String startingPoint;

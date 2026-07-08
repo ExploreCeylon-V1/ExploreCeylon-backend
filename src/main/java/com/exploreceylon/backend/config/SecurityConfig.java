@@ -37,6 +37,7 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                 .requestMatchers("/api/v1/auth/**").permitAll()
                 .requestMatchers("/api/v1/hotels/**").permitAll()
+                .requestMatchers(HttpMethod.POST, "/api/v1/vehicles/local/*/reviews").authenticated()
                 .requestMatchers("/api/v1/vehicles/**").permitAll()
                 .requestMatchers("/api/v1/vehicle-bookings/**").authenticated()
                 .requestMatchers("/api/v1/events/**").permitAll()
@@ -52,11 +53,13 @@ public class SecurityConfig {
                 .requestMatchers("/api/v1/guide-bookings/**").authenticated()
                 .requestMatchers("/api/v1/trips/**").authenticated()
                 .requestMatchers("/api/v1/budget/**").authenticated()
+                .requestMatchers("/api/v1/payments/*/notify").permitAll() // PayHere webhooks
                 .requestMatchers("/api/v1/payments/**").authenticated()
-                .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
-                .requestMatchers("/api/v1/destinations/**").permitAll()
                 .requestMatchers("/api/v1/admin/stats/**").permitAll()
                 .requestMatchers("/api/v1/guide-payments/**").hasRole("ADMIN")
+                .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
+                .requestMatchers("/api/v1/destinations/**").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/v1/users/count").permitAll()
                 .anyRequest().authenticated()
             )
             .sessionManagement(session -> session

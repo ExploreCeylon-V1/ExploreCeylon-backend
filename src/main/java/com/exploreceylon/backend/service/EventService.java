@@ -104,6 +104,8 @@ public class EventService {
                     ? req.getImageUrls() : List.of())
                 .isRecurring(req.getIsRecurring() != null
                         ? req.getIsRecurring() : true)
+                .travelStyleTags(req.getTravelStyleTags())
+                .estimatedCost(req.getEstimatedCost())
                 .build();
         return toResponse(eventRepository.save(event));
     }
@@ -123,6 +125,8 @@ public class EventService {
         if (req.getStartDate()   != null) event.setStartDate(req.getStartDate());
         if (req.getEndDate()     != null) event.setEndDate(req.getEndDate());
         if (req.getImageUrls()    != null) event.setImageUrls(req.getImageUrls());
+        if (req.getTravelStyleTags() != null) event.setTravelStyleTags(req.getTravelStyleTags());
+        if (req.getEstimatedCost()   != null) event.setEstimatedCost(req.getEstimatedCost());
         return toResponse(eventRepository.save(event));
     }
 
@@ -148,6 +152,8 @@ public class EventService {
         res.setImageUrls(e.getImageUrls());
         res.setIsRecurring(e.getIsRecurring());
         res.setCreatedAt(e.getCreatedAt());
+        res.setTravelStyleTags(e.getTravelStyleTags());
+        res.setEstimatedCost(e.getEstimatedCost());
         return res;
     }
 }

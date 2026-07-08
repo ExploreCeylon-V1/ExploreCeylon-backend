@@ -4,7 +4,6 @@ import com.exploreceylon.backend.dto.trip.*;
 import com.exploreceylon.backend.model.*;
 import com.exploreceylon.backend.model.Trip.TripStatus;
 import com.exploreceylon.backend.repository.*;
-import com.exploreceylon.backend.util.GeoUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -16,11 +15,8 @@ import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HashSet;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
@@ -34,219 +30,15 @@ public class TripService {
     private final TripDayItemRepository tripDayItemRepository;
     private final UserRepository        userRepository;
     private final AiService             aiService;
-    private final DestinationRepository destinationRepository;
-    private final HiddenGemRepository   hiddenGemRepository;
-    private final EventRepository       eventRepository;
     private final VehicleBookingRepository vehicleBookingRepository;
     private final GuideBookingRepository   guideBookingRepository;
     private final BudgetRepository         budgetRepository;
+    private final ItineraryAssemblyService itineraryAssemblyService;
 
-    // Splits a leading name off strings like "Gem Name — description"
-    // or "Gem Name - description" as returned by the AI for hiddenGem.
-    private String extractLeadingName(String raw) {
-        if (raw == null) return null;
-        String name = raw.split("—", 2)[0].split(" - ", 2)[0].trim();
-        return name.isEmpty() ? null : name;
-    }
-
-    // Resolves an AI-returned gem string back to a real DB row. Tries the
-    // full raw string first — some real gem titles legitimately contain
-    // an em dash (e.g. "Secret Tea Estate Cafe — Nuwara Eliya"), so
-    // truncating before matching would miss them — then falls back to
-    // the leading-name heuristic for the common "Name — description" case.
-    private java.util.Optional<HiddenGem> resolveGem(String raw) {
-        if (raw == null) return java.util.Optional.empty();
-        java.util.Optional<HiddenGem> exact =
-                hiddenGemRepository.findByTitleIgnoreCase(raw.trim());
-        if (exact.isPresent()) return exact;
-        String leading = extractLeadingName(raw);
-        return leading == null ? java.util.Optional.empty()
-                : hiddenGemRepository.findByTitleIgnoreCase(leading);
-    }
-
-    // Same idea as resolveGem, for AI-returned festival/event strings.
-    private java.util.Optional<Event> resolveEvent(String raw) {
-        if (raw == null) return java.util.Optional.empty();
-        java.util.Optional<Event> exact =
-                eventRepository.findByTitleIgnoreCase(raw.trim());
-        if (exact.isPresent()) return exact;
-        String leading = extractLeadingName(raw);
-        return leading == null ? java.util.Optional.empty()
-                : eventRepository.findByTitleIgnoreCase(leading);
-    }
-
-    // Which days should keep/drop/gain a hidden gem so the trip ends up
-    // with a deterministic 2-3 total, instead of trusting the LLM's
-    // "inject 1 every 2-3 days" prompt wording (which can yield anywhere
-    // from 0 to totalDays gems).
-    private record GemPlan(Set<Integer> dropDayIndexes,
-                            Map<Integer, HiddenGem> injectedByDayIndex) {}
-
-    private int targetGemCount(int totalDays) {
-        if (totalDays <= 1) return 1;
-        if (totalDays == 2) return 2;
-        return 3;
-    }
-
-    private GemPlan planHiddenGems(JsonNode daysArray) {
-        int target = targetGemCount(daysArray.size());
-
-        List<Integer> gemDayIndexes = new ArrayList<>();
-        Set<String> usedGemNames = new HashSet<>();
-        for (int i = 0; i < daysArray.size(); i++) {
-            String raw = daysArray.get(i).path("hiddenGem").asText(null);
-            String name = (raw != null && !raw.equalsIgnoreCase("null")
-                    && !raw.isBlank()) ? extractLeadingName(raw) : null;
-            if (name != null) {
-                gemDayIndexes.add(i);
-                usedGemNames.add(name.toLowerCase());
-            }
-        }
-
-        Set<Integer> dropDayIndexes = new HashSet<>();
-        if (gemDayIndexes.size() > target) {
-            dropDayIndexes.addAll(
-                    gemDayIndexes.subList(target, gemDayIndexes.size()));
-        }
-
-        Map<Integer, HiddenGem> injected = new HashMap<>();
-        int needed = target - Math.min(gemDayIndexes.size(), target);
-        if (needed > 0) {
-            List<Integer> gemlessDayIndexes = new ArrayList<>();
-            for (int i = 0; i < daysArray.size(); i++) {
-                if (!gemDayIndexes.contains(i)) gemlessDayIndexes.add(i);
-            }
-
-            Set<String> dayRegions = new LinkedHashSet<>();
-            for (int i = 0; i < daysArray.size(); i++) {
-                String r = daysArray.get(i).path("region").asText(null);
-                if (r != null && !r.isBlank()) dayRegions.add(r);
-            }
-
-            List<HiddenGem> pool = new ArrayList<>();
-            for (String region : dayRegions) {
-                pool.addAll(hiddenGemRepository
-                        .findByDistrictIgnoreCaseAndApprovedTrueOrderByRatingDesc(
-                                region));
-            }
-            if (pool.isEmpty()) {
-                pool.addAll(hiddenGemRepository
-                        .findByApprovedTrueOrderByRatingDesc());
-            }
-
-            List<HiddenGem> fillers = pool.stream()
-                    .filter(g -> !usedGemNames.contains(
-                            g.getTitle().toLowerCase()))
-                    .distinct()
-                    .limit(needed)
-                    .collect(Collectors.toList());
-
-            if (!gemlessDayIndexes.isEmpty()) {
-                double spacing = (double) gemlessDayIndexes.size()
-                        / Math.max(1, fillers.size());
-                for (int n = 0; n < fillers.size(); n++) {
-                    int pos = Math.min((int) Math.floor(n * spacing),
-                            gemlessDayIndexes.size() - 1);
-                    injected.putIfAbsent(
-                            gemlessDayIndexes.get(pos), fillers.get(n));
-                }
-            }
-        }
-
-        return new GemPlan(dropDayIndexes, injected);
-    }
-
-    // ── Distance-based ordering ─────────────────────────────
-    // A day's item paired with its real coordinates, if the AI's text
-    // could be resolved to a DB row. Items without coordinates (e.g.
-    // generic activities with no matching destination) are left out of
-    // the nearest-neighbor pass and appended in their original order.
-    private record ItemBuild(TripDayItem item, Double lat, Double lng) {
-        boolean hasCoords() { return lat != null && lng != null; }
-    }
-
-    private record DayBuild(TripDay day, List<ItemBuild> items,
-                             Double lat, Double lng) {
-        boolean hasCoords() { return lat != null && lng != null; }
-    }
-
-    // Greedy nearest-neighbor path over points with coordinates, starting
-    // from the first element. Points without coordinates are appended at
-    // the end, preserving their original relative order.
-    private <T> List<T> nearestNeighborOrder(
-            List<T> points, java.util.function.Function<T, Double> lat,
-            java.util.function.Function<T, Double> lng) {
-
-        List<T> withCoords = points.stream()
-                .filter(p -> lat.apply(p) != null && lng.apply(p) != null)
-                .collect(Collectors.toList());
-        List<T> withoutCoords = points.stream()
-                .filter(p -> lat.apply(p) == null || lng.apply(p) == null)
-                .collect(Collectors.toList());
-
-        List<T> ordered = new ArrayList<>();
-        if (!withCoords.isEmpty()) {
-            List<T> remaining = new ArrayList<>(withCoords);
-            T current = remaining.remove(0);
-            ordered.add(current);
-            while (!remaining.isEmpty()) {
-                T nearest = null;
-                double best = Double.MAX_VALUE;
-                for (T candidate : remaining) {
-                    double d = GeoUtils.distanceKm(
-                            lat.apply(current), lng.apply(current),
-                            lat.apply(candidate), lng.apply(candidate));
-                    if (d < best) { best = d; nearest = candidate; }
-                }
-                ordered.add(nearest);
-                remaining.remove(nearest);
-                current = nearest;
-            }
-        }
-        ordered.addAll(withoutCoords);
-        return ordered;
-    }
-
-    // Reorders a trip's days by real distance instead of trusting the
-    // LLM's own ordering claims. Day 1 (arrival) and the final day
-    // (departure) stay fixed in place, per the prompt's own anchoring —
-    // only the interior days are reshuffled via nearest-neighbor over
-    // each day's item centroid, to reduce backtracking between regions.
-    private List<DayBuild> orderInteriorDaysByNearestNeighbor(
-            List<DayBuild> days) {
-        if (days.size() <= 3) return days;
-
-        DayBuild first = days.get(0);
-        DayBuild last = days.get(days.size() - 1);
-        List<DayBuild> interior = new ArrayList<>(days.subList(1, days.size() - 1));
-
-        // Seed the chain from whichever interior day is closest to the
-        // fixed arrival day, so the path flows outward from Day 1 instead
-        // of just picking up wherever the LLM happened to list first.
-        if (first.hasCoords()) {
-            interior.sort(java.util.Comparator.comparingDouble(d -> d.hasCoords()
-                    ? GeoUtils.distanceKm(first.lat(), first.lng(), d.lat(), d.lng())
-                    : Double.MAX_VALUE));
-        }
-
-        List<DayBuild> orderedInterior = nearestNeighborOrder(
-                interior, DayBuild::lat, DayBuild::lng);
-
-        List<DayBuild> result = new ArrayList<>();
-        result.add(first);
-        result.addAll(orderedInterior);
-        result.add(last);
-        return result;
-    }
-
-    private Double average(List<Double> values) {
-        List<Double> nonNull = values.stream()
-                .filter(java.util.Objects::nonNull)
-                .collect(Collectors.toList());
-        return nonNull.isEmpty() ? null
-                : nonNull.stream().mapToDouble(Double::doubleValue)
-                        .average().orElse(0);
-    }
+    // Fixed conversion used only to compare the assembled itinerary's
+    // USD cost estimate against a user's LKR budget target (fix 4).
+    // Not a live FX rate — good enough for a warning-level estimate.
+    private static final double USD_TO_LKR_RATE = 300.0;
 
     // ── Get current logged-in user ─────────────────────────
     private User getCurrentUser() {
@@ -310,6 +102,7 @@ public class TripService {
                 .travelStyle(primaryTravelStyle)
                 .budgetRange(req.getBudgetRange())
                 .groupSize(req.getGroupSize() != null ? req.getGroupSize() : 1)
+                .budgetAmountLkr(req.getBudgetAmountLkr())
                 .status(TripStatus.DRAFT)
                 .aiGenerated(Boolean.TRUE.equals(req.getGenerateWithAi()))
                 .build();
@@ -526,58 +319,71 @@ public class TripService {
             regions = List.of(trip.getToLocation());
         }
 
-        // Call Python AI Service
-        JsonNode aiResponse = aiService.generateItinerary(
-                req.getStartDate().toString(),
-                req.getEndDate().toString(),
-                travelStyle,
-                budgetRange,
-                req.getGroupSize(),
-                regions,
-                interests,
-                startingPoint,
-                req.getSpecialNotes()
-        ).block();
-
-        if (aiResponse == null) {
-            throw new RuntimeException("AI service returned null response");
-        }
-        if (!aiResponse.path("success").asBoolean(false)) {
-            throw new RuntimeException("AI generation failed");
-        }
-
-        JsonNode data = aiResponse.path("data");
-
-        // Validate the AI response shape before touching any trip state,
-        // so a malformed/hallucinated LLM response fails loudly instead
-        // of silently wiping the existing itinerary.
         int expectedDays = (int) (ChronoUnit.DAYS.between(
                 req.getStartDate(), req.getEndDate()) + 1);
-        JsonNode validatedDaysNode = data.path("days");
-        if (!validatedDaysNode.isArray() || validatedDaysNode.isEmpty()) {
+        int groupSize = req.getGroupSize() != null ? req.getGroupSize()
+                : (trip.getGroupSize() != null ? trip.getGroupSize() : 1);
+
+        // ── Geocode origin/destination (reuses the existing name-search
+        // that used to live in prompt_builder.py — see
+        // ItineraryAssemblyService.geocode) so the corridor can be built
+        // between where the traveler is actually coming FROM and going TO,
+        // not just around the destination alone. ──────────────────────
+        ItineraryAssemblyService.GeoPoint origin = itineraryAssemblyService
+                .geocode(startingPoint)
+                .orElseGet(() -> new ItineraryAssemblyService.GeoPoint(6.9271, 79.8612)); // Colombo fallback
+        String destinationQuery = (trip.getToLocation() != null
+                && !trip.getToLocation().isBlank())
+                ? trip.getToLocation()
+                : (!regions.isEmpty() ? regions.get(0) : null);
+        ItineraryAssemblyService.GeoPoint destinationPoint = destinationQuery != null
+                ? itineraryAssemblyService.geocode(destinationQuery).orElse(origin)
+                : origin;
+
+        BudgetLevel budgetLevel;
+        try {
+            budgetLevel = BudgetLevel.valueOf(budgetRange);
+        } catch (IllegalArgumentException e) {
+            budgetLevel = BudgetLevel.MID_RANGE;
+        }
+        List<String> travelStylesList =
+                req.getTravelStyles() != null && !req.getTravelStyles().isEmpty()
+                        ? req.getTravelStyles().stream().map(Enum::name)
+                                .collect(Collectors.toList())
+                        : (req.getTravelStyle() != null
+                                ? List.of(req.getTravelStyle().name()) : List.of());
+
+        // ── Deterministic day/stop assembly — the backend, not the LLM,
+        // now decides which stops go on which day (Phase 4). ───────────
+        List<ItineraryAssemblyService.PlannedDay> plannedDays =
+                itineraryAssemblyService.assemble(
+                        origin, destinationPoint, req.getStartDate(),
+                        expectedDays, groupSize, budgetLevel,
+                        travelStylesList);
+
+        if (plannedDays.stream().allMatch(d -> d.stops().isEmpty())) {
             throw new RuntimeException(
-                    "AI response contained no itinerary days");
+                    "Could not find any destinations/gems near this route to build an itinerary");
         }
-        if (validatedDaysNode.size() != expectedDays) {
-            throw new RuntimeException(String.format(
-                    "AI response day count mismatch: expected %d, got %d",
-                    expectedDays, validatedDaysNode.size()));
-        }
-        Set<Integer> seenDayNumbers = new HashSet<>();
-        for (JsonNode dayNode : validatedDaysNode) {
-            int dayNumber = dayNode.path("dayNumber").asInt(-1);
-            if (dayNumber < 1 || dayNumber > expectedDays
-                    || !seenDayNumbers.add(dayNumber)) {
-                throw new RuntimeException(
-                        "AI response contained an invalid or duplicate day number: "
-                                + dayNumber);
+
+        // ── Ask the AI service to write narrative only (title, per-day
+        // theme/tips, per-stop description) for this fixed structure. A
+        // failure here degrades gracefully to generic text instead of
+        // failing the whole generation — the itinerary structure itself
+        // is already valid without the LLM's involvement. ──────────────
+        JsonNode narrativeData = null;
+        try {
+            JsonNode narrativeResp = aiService.generateNarrative(
+                    buildNarrativeRequestBody(req, travelStyle, budgetRange,
+                            startingPoint, trip.getToLocation(), groupSize, plannedDays)
+            ).block();
+            if (narrativeResp != null
+                    && narrativeResp.path("success").asBoolean(false)) {
+                narrativeData = narrativeResp.path("data");
             }
-            if (!dayNode.path("locations").isArray()
-                    || dayNode.path("locations").isEmpty()) {
-                throw new RuntimeException(
-                        "AI response day " + dayNumber
-                                + " has no locations");
-            }
+        } catch (Exception e) {
+            log.warn("AI narrative generation failed, using generic day text: {}",
+                    e.getMessage());
         }
 
         // Update title with AI's title, but only if the user hasn't
@@ -586,7 +392,8 @@ public class TripService {
         String autoTitle = generateTripTitle(
                 trip.getFromLocation(), trip.getToLocation(),
                 trip.getStartDate(), trip.getEndDate());
-        String aiTitle = data.path("tripTitle").asText(null);
+        String aiTitle = narrativeData != null
+                ? narrativeData.path("tripTitle").asText(null) : null;
         boolean titleIsCustomized = trip.getTitle() != null
                 && !trip.getTitle().equals(autoTitle);
         if (aiTitle != null && !aiTitle.isBlank() && !titleIsCustomized) {
@@ -602,137 +409,68 @@ public class TripService {
             trip.getPreference().setSpecialNotes(req.getSpecialNotes());
         }
 
-        // Clear existing days then rebuild from AI response
+        // Clear existing days then rebuild from the planned structure
         trip.getDays().clear();
         tripRepository.save(trip);
 
-        JsonNode daysNode = validatedDaysNode;
-        GemPlan gemPlan = planHiddenGems(daysNode);
-        List<DayBuild> dayBuilds = new ArrayList<>();
+        for (ItineraryAssemblyService.PlannedDay pd : plannedDays) {
+            JsonNode narrativeDay = findNarrativeDay(narrativeData, pd.dayNumber());
+            String theme = textOrNull(narrativeDay, "theme");
+            String tips  = textOrNull(narrativeDay, "tips");
 
-        if (daysNode.isArray()) {
-            for (int dayIdx = 0; dayIdx < daysNode.size(); dayIdx++) {
-                JsonNode dayNode = daysNode.get(dayIdx);
+            TripDay day = TripDay.builder()
+                    .trip(trip)
+                    .dayNumber(pd.dayNumber())
+                    .date(pd.date())
+                    .region(pd.region())
+                    .theme(theme != null ? theme
+                            : "Day " + pd.dayNumber() + ": " + pd.region())
+                    .tips(tips)
+                    .estimatedDayCost(pd.estimatedDayCost())
+                    .build();
 
-                TripDay day = TripDay.builder()
-                        .trip(trip)
-                        .region(dayNode.path("region").asText(null))
-                        .theme(dayNode.path("theme").asText(null))
-                        .tips(dayNode.path("tips").asText(null))
-                        .estimatedDayCost(
-                                dayNode.path("estimatedDayCost").asDouble(0))
+            List<ItineraryAssemblyService.PlannedStop> stops = pd.stops();
+            JsonNode narrativeStops = narrativeDay != null
+                    ? narrativeDay.path("stops") : null;
+            for (int i = 0; i < stops.size(); i++) {
+                ItineraryAssemblyService.PlannedStop stop = stops.get(i);
+                String description = (narrativeStops != null && narrativeStops.isArray()
+                        && i < narrativeStops.size())
+                        ? textOrNull(narrativeStops.get(i), "description")
+                        : null;
+
+                TripDayItem.ItemType itemType =
+                        stop.type() == ItineraryAssemblyService.StopType.GEM
+                                ? TripDayItem.ItemType.GEM
+                                : TripDayItem.ItemType.ACTIVITY;
+                String titlePrefix = switch (stop.type()) {
+                    case GEM   -> "Hidden Gem: ";
+                    case EVENT -> "Festival: ";
+                    case DESTINATION -> "";
+                };
+
+                StringBuilder notes = new StringBuilder(
+                        "[" + capitalizeSlot(stop.slot()) + "]");
+                if (description != null && !description.isBlank()) {
+                    notes.append(" ").append(description);
+                }
+                if (stop.type() == ItineraryAssemblyService.StopType.EVENT) {
+                    notes.append(" Special festival event on this day!");
+                }
+
+                TripDayItem item = TripDayItem.builder()
+                        .tripDay(day)
+                        .type(itemType)
+                        .title(titlePrefix + stop.name())
+                        .referenceId(stop.referenceId() != null
+                                ? stop.referenceId().toString() : null)
+                        .cost(stop.costUsd() != null ? stop.costUsd() : 0.0)
+                        .currency("USD")
+                        .orderIndex(i)
+                        .notes(notes.toString())
                         .build();
-
-                List<ItemBuild> itemBuilds = new ArrayList<>();
-
-                // Locations → ACTIVITY items
-                JsonNode locations = dayNode.path("locations");
-                if (locations.isArray()) {
-                    for (JsonNode loc : locations) {
-                        String locName = loc.asText();
-                        java.util.Optional<Destination> destMatch =
-                                destinationRepository.findByNameIgnoreCase(locName);
-                        TripDayItem item = TripDayItem.builder()
-                                .tripDay(day)
-                                .type(TripDayItem.ItemType.ACTIVITY)
-                                .title(locName)
-                                .referenceId(destMatch
-                                        .map(d -> d.getId().toString())
-                                        .orElse(null))
-                                .cost(0.0).currency("USD")
-                                .build();
-                        itemBuilds.add(new ItemBuild(item,
-                                destMatch.map(Destination::getLatitude).orElse(null),
-                                destMatch.map(Destination::getLongitude).orElse(null)));
-                    }
-                }
-
-                // Hidden gem → GEM item. The day-level count is enforced
-                // deterministically by gemPlan (target of 2-3 per trip)
-                // rather than trusting the LLM's per-day inclusion.
-                HiddenGem injectedGem = gemPlan.injectedByDayIndex().get(dayIdx);
-                if (injectedGem != null) {
-                    TripDayItem item = TripDayItem.builder()
-                            .tripDay(day)
-                            .type(TripDayItem.ItemType.GEM)
-                            .title("Hidden Gem: " + injectedGem.getTitle())
-                            .referenceId(injectedGem.getId().toString())
-                            .cost(0.0).currency("USD")
-                            .build();
-                    itemBuilds.add(new ItemBuild(item,
-                            injectedGem.getLatitude(), injectedGem.getLongitude()));
-                } else if (!gemPlan.dropDayIndexes().contains(dayIdx)) {
-                    String hiddenGem = dayNode.path("hiddenGem").asText(null);
-                    if (hiddenGem != null && !hiddenGem.equals("null")
-                            && !hiddenGem.isBlank()) {
-                        java.util.Optional<HiddenGem> gemMatch = resolveGem(hiddenGem);
-                        TripDayItem item = TripDayItem.builder()
-                                .tripDay(day)
-                                .type(TripDayItem.ItemType.GEM)
-                                .title("Hidden Gem: " + hiddenGem)
-                                .referenceId(gemMatch
-                                        .map(g -> g.getId().toString())
-                                        .orElse(null))
-                                .cost(0.0).currency("USD")
-                                .build();
-                        itemBuilds.add(new ItemBuild(item,
-                                gemMatch.map(HiddenGem::getLatitude).orElse(null),
-                                gemMatch.map(HiddenGem::getLongitude).orElse(null)));
-                    }
-                }
-
-                // Festival event → ACTIVITY item
-                String festivalEvent =
-                        dayNode.path("festivalEvent").asText(null);
-                if (festivalEvent != null && !festivalEvent.equals("null")
-                        && !festivalEvent.isBlank()) {
-                    java.util.Optional<Event> eventMatch = resolveEvent(festivalEvent);
-                    TripDayItem item = TripDayItem.builder()
-                            .tripDay(day)
-                            .type(TripDayItem.ItemType.ACTIVITY)
-                            .title("Festival: " + festivalEvent)
-                            .referenceId(eventMatch
-                                    .map(e -> e.getId().toString())
-                                    .orElse(null))
-                            .cost(0.0).currency("USD")
-                            .notes("Special festival event on this day!")
-                            .build();
-                    itemBuilds.add(new ItemBuild(item,
-                            eventMatch.map(Event::getLatitude).orElse(null),
-                            eventMatch.map(Event::getLongitude).orElse(null)));
-                }
-
-                // Order this day's stops by real distance (nearest-neighbor)
-                // instead of trusting the order the LLM listed them in.
-                List<ItemBuild> orderedItems = nearestNeighborOrder(
-                        itemBuilds, ItemBuild::lat, ItemBuild::lng);
-                for (int i = 0; i < orderedItems.size(); i++) {
-                    orderedItems.get(i).item().setOrderIndex(i);
-                }
-                day.getItems().addAll(orderedItems.stream()
-                        .map(ItemBuild::item).collect(Collectors.toList()));
-
-                Double centroidLat = average(orderedItems.stream()
-                        .map(ItemBuild::lat).collect(Collectors.toList()));
-                Double centroidLng = average(orderedItems.stream()
-                        .map(ItemBuild::lng).collect(Collectors.toList()));
-
-                dayBuilds.add(new DayBuild(day, orderedItems, centroidLat, centroidLng));
+                day.getItems().add(item);
             }
-        }
-
-        // Reorder days by real distance between regions instead of
-        // trusting the LLM's own sequencing (day 1 arrival and the
-        // final departure day stay anchored in place).
-        List<DayBuild> orderedDays = orderInteriorDaysByNearestNeighbor(dayBuilds);
-
-        int dayNumber = 1;
-        LocalDate dayDate = req.getStartDate();
-        for (DayBuild db : orderedDays) {
-            TripDay day = db.day();
-            day.setDayNumber(dayNumber++);
-            day.setDate(dayDate);
-            dayDate = dayDate.plusDays(1);
             trip.getDays().add(day);
         }
 
@@ -777,32 +515,115 @@ public class TripService {
             }
         }
 
-        // Deterministic per-day cost, replacing the LLM's own freeform
-        // per-day cost guess with the rate-table-based budget estimator.
-        try {
-            JsonNode budgetResp = aiService.estimateBudget(
-                    expectedDays, budgetRange, req.getGroupSize(), regions)
-                    .block();
-            JsonNode budgetData = budgetResp != null
-                    ? budgetResp.path("data") : null;
-            double groupTotal = budgetData != null
-                    ? budgetData.path("group_total").asDouble(-1) : -1;
-            if (groupTotal >= 0 && expectedDays > 0) {
-                double perDay = Math.round(
-                        (groupTotal / expectedDays) * 100.0) / 100.0;
-                for (TripDay day : trip.getDays()) {
-                    day.setEstimatedDayCost(perDay);
+        // ── Budget validation (fix 4) — warning only, no automatic
+        // destination substitution (out of scope, see NOTE in
+        // ItineraryAssemblyService.computeDayCost). Compares the
+        // itinerary's total estimated cost (USD, summed from each
+        // PlannedDay's real estimatedDayCost) against the user's numeric
+        // LKR budget target, if one was set. ─────────────────────────
+        if (req.getBudgetAmountLkr() != null) {
+            trip.setBudgetAmountLkr(req.getBudgetAmountLkr());
+        }
+        if (trip.getBudgetAmountLkr() != null && !trip.getDays().isEmpty()) {
+            double totalUsd = plannedDays.stream()
+                    .mapToDouble(ItineraryAssemblyService.PlannedDay::estimatedDayCost)
+                    .sum();
+            double totalLkr = totalUsd * USD_TO_LKR_RATE;
+            double budgetLkr = trip.getBudgetAmountLkr();
+            if (totalLkr > budgetLkr) {
+                double overPercent = ((totalLkr - budgetLkr) / budgetLkr) * 100.0;
+                String warningLine = String.format(
+                        "⚠️ Budget note: estimated cost (LKR %.0f) exceeds your budget of LKR %.0f by %.0f%%",
+                        totalLkr, budgetLkr, overPercent);
+                TripDay firstDay = trip.getDays().stream()
+                        .min(java.util.Comparator.comparingInt(TripDay::getDayNumber))
+                        .orElse(null);
+                if (firstDay != null) {
+                    String existingTips = firstDay.getTips();
+                    firstDay.setTips(existingTips == null || existingTips.isBlank()
+                            ? warningLine
+                            : existingTips + " " + warningLine);
                 }
             }
-        } catch (Exception e) {
-            log.warn("Budget estimate failed, keeping AI-provided day costs: {}",
-                    e.getMessage());
         }
+
+        // Per-day cost is already real (Phase 5): ItineraryAssemblyService
+        // computed each PlannedDay's estimatedDayCost from the actual
+        // chosen stops' entryFeeUsd + accommodation/food/transport
+        // estimates when the day was assembled above — no flat rate-table
+        // overwrite needed here anymore.
 
         Trip saved = tripRepository.save(trip);
         log.info("AI itinerary generated: {} days for trip {}",
                 saved.getDays().size(), req.getTripId());
         return toResponse(saved);
+    }
+
+    // ── Narrative request body builder (Phase 6 contract) ──
+    // Sends the already-final day/stop structure to the AI service and
+    // asks it to only write narrative text for it — see AiService
+    // .generateNarrative() and ExploreCeylon-ai-service's
+    // prompt_builder.build_narrative_prompt().
+    private Map<String, Object> buildNarrativeRequestBody(
+            GenerateAiTripRequest req, String travelStyle, String budgetRange,
+            String startingPoint, String toLocation, int groupSize,
+            List<ItineraryAssemblyService.PlannedDay> plannedDays) {
+
+        List<Map<String, Object>> daysPayload = new ArrayList<>();
+        for (ItineraryAssemblyService.PlannedDay pd : plannedDays) {
+            List<Map<String, Object>> stopsPayload = new ArrayList<>();
+            for (ItineraryAssemblyService.PlannedStop stop : pd.stops()) {
+                Map<String, Object> stopMap = new HashMap<>();
+                stopMap.put("type", stop.type().name());
+                stopMap.put("name", stop.name());
+                stopMap.put("slot", stop.slot());
+                stopsPayload.add(stopMap);
+            }
+            Map<String, Object> dayMap = new HashMap<>();
+            dayMap.put("dayNumber", pd.dayNumber());
+            dayMap.put("date", pd.date().toString());
+            dayMap.put("region", pd.region());
+            dayMap.put("stops", stopsPayload);
+            daysPayload.add(dayMap);
+        }
+
+        Map<String, Object> body = new HashMap<>();
+        body.put("start_date",     req.getStartDate().toString());
+        body.put("end_date",       req.getEndDate().toString());
+        body.put("travel_style",   travelStyle);
+        body.put("budget_range",   budgetRange);
+        body.put("group_size",     groupSize);
+        body.put("starting_point", startingPoint);
+        body.put("to_location",    toLocation);
+        if (req.getSpecialNotes() != null) body.put("special_notes", req.getSpecialNotes());
+        body.put("days", daysPayload);
+        return body;
+    }
+
+    // Finds the narrative day matching a planned day number, tolerating a
+    // missing/malformed AI response entirely (narrativeData null) or a
+    // response that dropped/reordered days — index-by-dayNumber instead
+    // of assuming positional alignment.
+    private JsonNode findNarrativeDay(JsonNode narrativeData, int dayNumber) {
+        if (narrativeData == null) return null;
+        JsonNode days = narrativeData.path("days");
+        if (!days.isArray()) return null;
+        for (JsonNode d : days) {
+            if (d.path("dayNumber").asInt(-1) == dayNumber) return d;
+        }
+        return null;
+    }
+
+    private String textOrNull(JsonNode node, String field) {
+        if (node == null) return null;
+        String value = node.path(field).asText(null);
+        return (value == null || value.isBlank() || value.equalsIgnoreCase("null"))
+                ? null : value;
+    }
+
+    private String capitalizeSlot(String slot) {
+        if (slot == null || slot.isBlank()) return "Stop";
+        return slot.charAt(0) + slot.substring(1).toLowerCase();
     }
 
     // ── MAPPER: Trip → TripResponse ────────────────────────
@@ -817,6 +638,7 @@ public class TripService {
         res.setTravelStyle(t.getTravelStyle());
         res.setBudgetRange(t.getBudgetRange());
         res.setGroupSize(t.getGroupSize());
+        res.setBudgetAmountLkr(t.getBudgetAmountLkr());
         res.setStatus(t.getStatus());
         res.setAiGenerated(t.getAiGenerated());
         res.setShareToken(t.getShareToken());

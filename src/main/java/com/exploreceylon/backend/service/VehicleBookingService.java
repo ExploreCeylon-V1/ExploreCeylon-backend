@@ -59,6 +59,8 @@ public class VehicleBookingService {
         long days = ChronoUnit.DAYS.between(
                 req.getPickupDate(), req.getDropoffDate()) + 1;
         double totalCost = vehicle.getPricePerDay() * days;
+        double advanceAmount = Math.round(totalCost * 0.20 * 100.0) / 100.0;
+        double balanceAmount = Math.round((totalCost - advanceAmount) * 100.0) / 100.0;
 
         // Get trip if provided
         Trip trip = null;
@@ -80,8 +82,10 @@ public class VehicleBookingService {
                         ? req.getDropoffLocation()
                         : req.getPickupLocation())
                 .totalCost(totalCost)
+                .advanceAmount(advanceAmount)
+                .balanceAmount(balanceAmount)
                 .notes(req.getNotes())
-                .status(VehicleBooking.BookingStatus.CONFIRMED)
+                .status(VehicleBooking.BookingStatus.PENDING_PAYMENT)
                 .build();
 
         VehicleBooking saved = bookingRepository.save(booking);
@@ -179,6 +183,8 @@ public class VehicleBookingService {
         res.setDropoffLocation(b.getDropoffLocation());
         res.setStatus(b.getStatus());
         res.setTotalCost(b.getTotalCost());
+        res.setAdvanceAmount(b.getAdvanceAmount());
+        res.setBalanceAmount(b.getBalanceAmount());
         res.setNotes(b.getNotes());
         res.setCreatedAt(b.getCreatedAt());
         return res;

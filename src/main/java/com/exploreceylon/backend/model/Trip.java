@@ -51,6 +51,11 @@ public class Trip {
     @Builder.Default
     private Integer groupSize = 1;
 
+    // Optional numeric total-trip budget in LKR, set by the user. Nullable
+    // — used only to validate the generated itinerary's estimated cost
+    // and surface a warning note; never used to auto-swap destinations.
+    private Double budgetAmountLkr;
+
     @Enumerated(EnumType.STRING)
     @Builder.Default
     private TripStatus status = TripStatus.DRAFT;

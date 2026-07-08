@@ -71,11 +71,11 @@ public class AdminService {
         // Pending bookings
         long pendingBookings  = vehicleBookings.stream()
                 .filter(b -> b.getStatus() ==
-                        VehicleBooking.BookingStatus.PENDING)
+                        VehicleBooking.BookingStatus.PENDING_PAYMENT)
                 .count()
                 + guideBookings.stream()
                 .filter(b -> b.getStatus() ==
-                        GuideBooking.BookingStatus.PENDING)
+                        GuideBooking.BookingStatus.PENDING_PAYMENT)
                 .count();
 
         // Content counts

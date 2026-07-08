@@ -28,4 +28,9 @@ public class CreateGemRequest {
     private String bestTime;
     private String tips;
     private List<String> imageUrls;
+    private String seasonMonths;
+    private String travelStyleTags;
+    private com.exploreceylon.backend.model.BudgetLevel budgetLevel;
+    private Double entryFeeUsd;
+    private Integer visitDurationMinutes;
 }

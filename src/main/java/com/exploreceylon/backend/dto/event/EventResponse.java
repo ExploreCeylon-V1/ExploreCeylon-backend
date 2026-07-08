@@ -21,4 +21,6 @@ public class EventResponse {
     private List<String> imageUrls;
     private Boolean isRecurring;
     private LocalDateTime createdAt;
+    private String travelStyleTags;
+    private Double estimatedCost;
 }

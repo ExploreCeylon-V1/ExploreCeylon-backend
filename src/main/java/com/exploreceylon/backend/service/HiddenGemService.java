@@ -6,13 +6,11 @@ import com.exploreceylon.backend.model.HiddenGem;
 import com.exploreceylon.backend.model.User;
 import com.exploreceylon.backend.repository.HiddenGemRepository;
 import com.exploreceylon.backend.repository.UserRepository;
-import com.exploreceylon.backend.util.GeoUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
-import java.util.Comparator;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -60,13 +58,11 @@ public class HiddenGemService {
     }
 
     // ── Nearby (distance-sorted, for AI trip planning) ─────
+    // Pushed to a SQL-level haversine ORDER BY (HiddenGemRepository
+    // .findNearestTo) instead of loading every approved row into Java.
     public List<GemResponse> findNearby(double lat, double lng, int limit) {
-        return gemRepository.findByApprovedTrueOrderByRatingDesc()
+        return gemRepository.findNearestTo(lat, lng, limit)
                 .stream()
-                .filter(g -> g.getLatitude() != null && g.getLongitude() != null)
-                .sorted(Comparator.comparingDouble(g -> GeoUtils.distanceKm(
-                        lat, lng, g.getLatitude(), g.getLongitude())))
-                .limit(limit)
                 .map(this::toResponse)
                 .collect(Collectors.toList());
     }
@@ -108,6 +104,11 @@ public class HiddenGemService {
                         ? req.getImageUrls() : List.of())
                 .submittedBy(user)
                 .approved(false) // pending admin approval
+                .seasonMonths(req.getSeasonMonths())
+                .travelStyleTags(req.getTravelStyleTags())
+                .budgetLevel(req.getBudgetLevel())
+                .entryFeeUsd(req.getEntryFeeUsd())
+                .visitDurationMinutes(req.getVisitDurationMinutes())
                 .build();
 
         return toResponse(gemRepository.save(gem));
@@ -130,6 +131,11 @@ public class HiddenGemService {
                 .imageUrls(req.getImageUrls() != null
                         ? req.getImageUrls() : List.of())
                 .approved(true) // admin adds → auto approved
+                .seasonMonths(req.getSeasonMonths())
+                .travelStyleTags(req.getTravelStyleTags())
+                .budgetLevel(req.getBudgetLevel())
+                .entryFeeUsd(req.getEntryFeeUsd())
+                .visitDurationMinutes(req.getVisitDurationMinutes())
                 .build();
 
         return toResponse(gemRepository.save(gem));
@@ -169,6 +175,11 @@ public class HiddenGemService {
         if (req.getBestTime()     != null) gem.setBestTime(req.getBestTime());
         if (req.getTips()         != null) gem.setTips(req.getTips());
         if (req.getImageUrls()    != null) gem.setImageUrls(req.getImageUrls());
+        if (req.getSeasonMonths() != null) gem.setSeasonMonths(req.getSeasonMonths());
+        if (req.getTravelStyleTags() != null) gem.setTravelStyleTags(req.getTravelStyleTags());
+        if (req.getBudgetLevel()  != null) gem.setBudgetLevel(req.getBudgetLevel());
+        if (req.getEntryFeeUsd()  != null) gem.setEntryFeeUsd(req.getEntryFeeUsd());
+        if (req.getVisitDurationMinutes() != null) gem.setVisitDurationMinutes(req.getVisitDurationMinutes());
 
         return toResponse(gemRepository.save(gem));
     }
@@ -197,6 +208,11 @@ public class HiddenGemService {
         res.setRating(g.getRating());
         res.setReviewCount(g.getReviewCount());
         res.setCreatedAt(g.getCreatedAt());
+        res.setSeasonMonths(g.getSeasonMonths());
+        res.setTravelStyleTags(g.getTravelStyleTags());
+        res.setBudgetLevel(g.getBudgetLevel());
+        res.setEntryFeeUsd(g.getEntryFeeUsd());
+        res.setVisitDurationMinutes(g.getVisitDurationMinutes());
         return res;
     }
 }
