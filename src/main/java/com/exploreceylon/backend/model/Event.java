@@ -39,6 +39,9 @@ public class Event {
     @Column(nullable = false)
     private String location;
 
+    private Double latitude;
+    private Double longitude;
+
     @Column(nullable = false)
     private LocalDate startDate;
 
@@ -56,6 +59,14 @@ public class Event {
 
     @Builder.Default
     private Boolean isRecurring = true;
+
+    // Comma separated travel-style tags, same convention as
+    // Destination.travelStyleTags. Nullable — NULL means "fits any style".
+    private String travelStyleTags;
+
+    // Estimated per-person cost in USD to attend, nullable — folded into
+    // the real per-day budget estimate alongside entryFeeUsd.
+    private Double estimatedCost;
 
     @Column(updatable = false)
     private LocalDateTime createdAt;

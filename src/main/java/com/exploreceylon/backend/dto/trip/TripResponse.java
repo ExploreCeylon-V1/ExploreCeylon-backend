@@ -11,11 +11,14 @@ import java.util.List;
 public class TripResponse {
     private Long id;
     private String title;
+    private String fromLocation;
+    private String toLocation;
     private LocalDate startDate;
     private LocalDate endDate;
     private Trip.TravelStyle travelStyle;
     private Trip.BudgetRange budgetRange;
     private Integer groupSize;
+    private Double budgetAmountLkr;
     private Trip.TripStatus status;
     private Boolean aiGenerated;
     private String shareToken;

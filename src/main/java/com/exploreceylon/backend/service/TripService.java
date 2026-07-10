@@ -2,6 +2,7 @@ package com.exploreceylon.backend.service;
 
 import com.exploreceylon.backend.dto.trip.*;
 import com.exploreceylon.backend.model.*;
+import com.exploreceylon.backend.model.Trip.TripStatus;
 import com.exploreceylon.backend.repository.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -9,12 +10,13 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.exploreceylon.backend.service.AiService;
 import com.fasterxml.jackson.databind.JsonNode;
 import java.time.LocalDate;
-import java.time.format.DateTimeFormatter;
-
+import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Service
@@ -23,11 +25,21 @@ import java.util.stream.Collectors;
 @Transactional
 public class TripService {
 
-    private final TripRepository       tripRepository;
-    private final TripDayRepository    tripDayRepository;
+    private final TripRepository        tripRepository;
+    private final TripDayRepository     tripDayRepository;
     private final TripDayItemRepository tripDayItemRepository;
-    private final UserRepository       userRepository;
-    private final AiService            aiService;
+    private final UserRepository        userRepository;
+    private final AiService             aiService;
+    private final VehicleBookingRepository vehicleBookingRepository;
+    private final GuideBookingRepository   guideBookingRepository;
+    private final BudgetRepository         budgetRepository;
+    private final ItineraryAssemblyService itineraryAssemblyService;
+
+    // Fixed conversion used only to compare the assembled itinerary's
+    // USD cost estimate against a user's LKR budget target (fix 4).
+    // Not a live FX rate — good enough for a warning-level estimate.
+    private static final double USD_TO_LKR_RATE = 300.0;
+
     // ── Get current logged-in user ─────────────────────────
     private User getCurrentUser() {
         String email = SecurityContextHolder.getContext()
@@ -36,32 +48,78 @@ public class TripService {
                 .orElseThrow(() -> new RuntimeException("User not found"));
     }
 
+    // ── Auto-generate trip title ───────────────────────────
+    private String generateTripTitle(String fromLocation,
+                                        String toLocation,
+                                        LocalDate startDate,
+                                        LocalDate endDate) {
+        long days = ChronoUnit.DAYS.between(startDate, endDate) + 1;
+
+        String from = (fromLocation != null && !fromLocation.isBlank())
+                ? fromLocation.trim() : null;
+        String to   = (toLocation   != null && !toLocation.isBlank())
+                ? toLocation.trim()   : null;
+
+        // ✅ em dash වෙනුවට simple hyphen use කරන්න
+        if (from == null && to == null)
+                return days + " Days - Sri Lanka Adventure";
+        if (from == null)
+                return days + " Days - Explore " + to;
+        if (to == null)
+                return days + " Days - From " + from;
+        if (from.equalsIgnoreCase(to))
+                return days + " Days - Explore " + to;
+
+        return days + " Days - " + from + " to " + to;
+        }
+
     // ── Create Trip ────────────────────────────────────────
     public TripResponse createTrip(CreateTripRequest req) {
         User user = getCurrentUser();
         log.info("Creating trip for user: {}", user.getEmail());
 
+        // Auto-generate title if not provided
+        String title = (req.getTitle() != null && !req.getTitle().isBlank())
+                ? req.getTitle()
+                : generateTripTitle(
+                        req.getFromLocation(),
+                        req.getToLocation(),
+                        req.getStartDate(),
+                        req.getEndDate());
+
+        Trip.TravelStyle primaryTravelStyle =
+                req.getTravelStyles() != null && !req.getTravelStyles().isEmpty()
+                        ? req.getTravelStyles().get(0)
+                        : req.getTravelStyle();
+
         Trip trip = Trip.builder()
                 .user(user)
-                .title(req.getTitle())
+                .title(title)
+                .fromLocation(req.getFromLocation())
+                .toLocation(req.getToLocation())
                 .startDate(req.getStartDate())
                 .endDate(req.getEndDate())
-                .travelStyle(req.getTravelStyle())
+                .travelStyle(primaryTravelStyle)
                 .budgetRange(req.getBudgetRange())
                 .groupSize(req.getGroupSize() != null ? req.getGroupSize() : 1)
-                .aiGenerated(req.getGenerateWithAi() != null
-                        && req.getGenerateWithAi())
+                .budgetAmountLkr(req.getBudgetAmountLkr())
+                .status(TripStatus.DRAFT)
+                .aiGenerated(Boolean.TRUE.equals(req.getGenerateWithAi()))
                 .build();
 
         // Save preference
-        if (req.getRegions() != null || req.getInterests() != null) {
+        if (req.getFromLocation() != null || req.getToLocation() != null
+                || req.getRegions() != null || req.getInterests() != null) {
             TripPreference pref = TripPreference.builder()
                     .trip(trip)
                     .regions(req.getRegions() != null
-                            ? String.join(",", req.getRegions()) : null)
+                            ? String.join(",", req.getRegions())
+                            : req.getToLocation())
                     .interests(req.getInterests() != null
                             ? String.join(",", req.getInterests()) : null)
-                    .startingPoint(req.getStartingPoint())
+                    .startingPoint(req.getFromLocation() != null
+                            ? req.getFromLocation()
+                            : req.getStartingPoint())
                     .specialNotes(req.getSpecialNotes())
                     .build();
             trip.setPreference(pref);
@@ -81,8 +139,31 @@ public class TripService {
         }
 
         Trip saved = tripRepository.save(trip);
-        log.info("Trip created: id={}, days={}", saved.getId(),
-                saved.getDays().size());
+        log.info("Trip created: id={}, title='{}', days={}",
+                saved.getId(), saved.getTitle(), saved.getDays().size());
+        return toResponse(saved);
+    }
+
+    // ── Update Trip Title ──────────────────────────────────
+    public TripResponse updateTripTitle(Long tripId, String newTitle) {
+        User user = getCurrentUser();
+
+        Trip trip = tripRepository.findById(tripId)
+                .orElseThrow(() -> new RuntimeException(
+                        "Trip not found: " + tripId));
+
+        if (!trip.getUser().getId().equals(user.getId())) {
+            throw new RuntimeException("Not authorized to edit this trip");
+        }
+
+        if (newTitle == null || newTitle.isBlank()) {
+            throw new RuntimeException("Title cannot be empty");
+        }
+
+        trip.setTitle(newTitle.trim());
+        Trip saved = tripRepository.save(trip);
+        log.info("Trip title updated: id={}, title='{}'",
+                saved.getId(), saved.getTitle());
         return toResponse(saved);
     }
 
@@ -97,12 +178,20 @@ public class TripService {
                 .collect(Collectors.toList());
     }
 
+    // ── Ownership guard — every non-public trip operation must own the trip ──
+    private void assertOwner(Trip trip, User user) {
+        if (!trip.getUser().getId().equals(user.getId())) {
+            throw new RuntimeException("Not authorized to access this trip");
+        }
+    }
+
     // ── Get Trip By ID ─────────────────────────────────────
     @Transactional(readOnly = true)
     public TripResponse getTripById(Long id) {
         Trip trip = tripRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException(
                         "Trip not found: " + id));
+        assertOwner(trip, getCurrentUser());
         return toResponse(trip);
     }
 
@@ -117,13 +206,14 @@ public class TripService {
 
     // ── Update Trip Day ────────────────────────────────────
     public TripDayResponse updateTripDay(Long tripId, Long dayId,
-                                         TripDayResponse req) {
+                                          TripDayResponse req) {
         TripDay day = tripDayRepository.findById(dayId)
                 .orElseThrow(() -> new RuntimeException(
                         "Day not found: " + dayId));
-        if (req.getRegion() != null) day.setRegion(req.getRegion());
-        if (req.getTheme()  != null) day.setTheme(req.getTheme());
-        if (req.getTips()   != null) day.setTips(req.getTips());
+        assertOwner(day.getTrip(), getCurrentUser());
+        if (req.getRegion()           != null) day.setRegion(req.getRegion());
+        if (req.getTheme()            != null) day.setTheme(req.getTheme());
+        if (req.getTips()             != null) day.setTips(req.getTips());
         if (req.getEstimatedDayCost() != null)
             day.setEstimatedDayCost(req.getEstimatedDayCost());
         return toDayResponse(tripDayRepository.save(day));
@@ -135,23 +225,21 @@ public class TripService {
         TripDay day = tripDayRepository.findById(dayId)
                 .orElseThrow(() -> new RuntimeException(
                         "Day not found: " + dayId));
+        assertOwner(day.getTrip(), getCurrentUser());
 
         TripDayItem item = TripDayItem.builder()
                 .tripDay(day)
                 .type(req.getType())
                 .referenceId(req.getReferenceId())
                 .title(req.getTitle())
-                .cost(req.getCost() != null ? req.getCost() : 0.0)
-                .currency(req.getCurrency() != null
-                        ? req.getCurrency() : "USD")
+                .cost(req.getCost()     != null ? req.getCost()     : 0.0)
+                .currency(req.getCurrency() != null ? req.getCurrency() : "USD")
                 .notes(req.getNotes())
-                .orderIndex(req.getOrderIndex() != null
-                        ? req.getOrderIndex() : 0)
+                .orderIndex(req.getOrderIndex() != null ? req.getOrderIndex() : 0)
                 .build();
 
         // Update day estimated cost
-        day.setEstimatedDayCost(
-                day.getEstimatedDayCost() + item.getCost());
+        day.setEstimatedDayCost(day.getEstimatedDayCost() + item.getCost());
         tripDayRepository.save(day);
 
         TripDayItem saved = tripDayItemRepository.save(item);
@@ -164,8 +252,8 @@ public class TripService {
         TripDayItem item = tripDayItemRepository.findById(itemId)
                 .orElseThrow(() -> new RuntimeException(
                         "Item not found: " + itemId));
+        assertOwner(item.getTripDay().getTrip(), getCurrentUser());
 
-        // Update day cost
         TripDay day = item.getTripDay();
         day.setEstimatedDayCost(
                 Math.max(0, day.getEstimatedDayCost() - item.getCost()));
@@ -179,184 +267,381 @@ public class TripService {
         Trip trip = tripRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException(
                         "Trip not found: " + id));
-        trip.setStatus(Trip.TripStatus.valueOf(status.toUpperCase()));
+        assertOwner(trip, getCurrentUser());
+        trip.setStatus(TripStatus.valueOf(status.toUpperCase()));
         return toResponse(tripRepository.save(trip));
     }
 
     // ── Delete Trip ────────────────────────────────────────
     public void deleteTrip(Long id) {
+        Trip trip = tripRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException(
+                        "Trip not found: " + id));
+        assertOwner(trip, getCurrentUser());
+
+        // Bookings are kept as historical records — detach them from the
+        // trip instead of deleting, so the FK doesn't block trip deletion.
+        vehicleBookingRepository.findByTripIdOrderByPickupDate(id)
+                .forEach(b -> {
+                    b.setTrip(null);
+                    vehicleBookingRepository.save(b);
+                });
+        guideBookingRepository.findByTripIdOrderByStartDate(id)
+                .forEach(b -> {
+                    b.setTrip(null);
+                    guideBookingRepository.save(b);
+                });
+
+        // The budget (and its items, via cascade) belongs to the trip.
+        budgetRepository.findByTripId(id)
+                .ifPresent(budgetRepository::delete);
+
         tripRepository.deleteById(id);
         log.info("Trip deleted: {}", id);
     }
 
     // ── Generate AI Itinerary ──────────────────────────────
     public TripResponse generateAiItinerary(GenerateAiTripRequest req) {
-    log.info("Generating AI itinerary for trip: {}", req.getTripId());
+        log.info("Generating AI itinerary for trip: {}", req.getTripId());
 
-    // Get trip
-    Trip trip = tripRepository.findById(req.getTripId())
-            .orElseThrow(() -> new RuntimeException(
-                    "Trip not found: " + req.getTripId()));
+        Trip trip = tripRepository.findById(req.getTripId())
+                .orElseThrow(() -> new RuntimeException(
+                        "Trip not found: " + req.getTripId()));
+        assertOwner(trip, getCurrentUser());
 
-    // Build region + interest lists
-    List<String> regions = req.getRegions() != null
-            ? req.getRegions() : List.of();
-    List<String> interests = req.getInterests() != null
-            ? req.getInterests() : List.of();
+        List<String> regions   = req.getRegions()   != null
+                ? req.getRegions()   : List.of();
+        List<String> interests = req.getInterests() != null
+                ? req.getInterests() : List.of();
 
-    // Travel style + budget
-    String travelStyle = req.getTravelStyle() != null
-            ? req.getTravelStyle().name() : "CULTURAL";
-    String budgetRange = req.getBudgetRange() != null
-            ? req.getBudgetRange().name() : "MID_RANGE";
+        String travelStyle =
+                req.getTravelStyles() != null && !req.getTravelStyles().isEmpty()
+                        ? req.getTravelStyles().stream()
+                                .map(Enum::name)
+                                .collect(Collectors.joining(", "))
+                        : (req.getTravelStyle() != null
+                                ? req.getTravelStyle().name() : "CULTURAL");
+        String budgetRange = req.getBudgetRange() != null
+                ? req.getBudgetRange().name() : "MID_RANGE";
 
-    // Call Python AI Service
-    JsonNode aiResponse = aiService.generateItinerary(
-            req.getStartDate().toString(),
-            req.getEndDate().toString(),
-            travelStyle,
-            budgetRange,
-            req.getGroupSize(),
-            regions,
-            interests,
-            req.getStartingPoint() != null
-                    ? req.getStartingPoint() : "Colombo",
-            req.getSpecialNotes()
-    ).block(); // blocking call — sync
+        // Determine starting point — prefer fromLocation
+        String startingPoint = (trip.getFromLocation() != null
+                && !trip.getFromLocation().isBlank())
+                ? trip.getFromLocation()
+                : (req.getStartingPoint() != null
+                        ? req.getStartingPoint() : "Colombo");
 
-    if (aiResponse == null) {
-        throw new RuntimeException("AI service returned null response");
-    }
+        // If toLocation set and regions empty, use toLocation as region hint
+        if (regions.isEmpty() && trip.getToLocation() != null
+                && !trip.getToLocation().isBlank()) {
+            regions = List.of(trip.getToLocation());
+        }
 
-    // Check success
-    if (!aiResponse.path("success").asBoolean(false)) {
-        throw new RuntimeException("AI generation failed");
-    }
+        int expectedDays = (int) (ChronoUnit.DAYS.between(
+                req.getStartDate(), req.getEndDate()) + 1);
+        int groupSize = req.getGroupSize() != null ? req.getGroupSize()
+                : (trip.getGroupSize() != null ? trip.getGroupSize() : 1);
 
-    JsonNode data = aiResponse.path("data");
+        // ── Geocode origin/destination (reuses the existing name-search
+        // that used to live in prompt_builder.py — see
+        // ItineraryAssemblyService.geocode) so the corridor can be built
+        // between where the traveler is actually coming FROM and going TO,
+        // not just around the destination alone. ──────────────────────
+        ItineraryAssemblyService.GeoPoint origin = itineraryAssemblyService
+                .geocode(startingPoint)
+                .orElseGet(() -> new ItineraryAssemblyService.GeoPoint(6.9271, 79.8612)); // Colombo fallback
+        String destinationQuery = (trip.getToLocation() != null
+                && !trip.getToLocation().isBlank())
+                ? trip.getToLocation()
+                : (!regions.isEmpty() ? regions.get(0) : null);
+        ItineraryAssemblyService.GeoPoint destinationPoint = destinationQuery != null
+                ? itineraryAssemblyService.geocode(destinationQuery).orElse(origin)
+                : origin;
 
-    // Update trip title if AI generated one
-    String aiTitle = data.path("tripTitle").asText(null);
-    if (aiTitle != null && !aiTitle.isEmpty()) {
-        trip.setTitle(aiTitle);
-    }
-    trip.setAiGenerated(true);
+        BudgetLevel budgetLevel;
+        try {
+            budgetLevel = BudgetLevel.valueOf(budgetRange);
+        } catch (IllegalArgumentException e) {
+            budgetLevel = BudgetLevel.MID_RANGE;
+        }
+        List<String> travelStylesList =
+                req.getTravelStyles() != null && !req.getTravelStyles().isEmpty()
+                        ? req.getTravelStyles().stream().map(Enum::name)
+                                .collect(Collectors.toList())
+                        : (req.getTravelStyle() != null
+                                ? List.of(req.getTravelStyle().name()) : List.of());
 
-    // Update preferences
-    if (trip.getPreference() != null) {
-        trip.getPreference().setRegions(
-                String.join(",", regions));
-        trip.getPreference().setInterests(
-                String.join(",", interests));
-        trip.getPreference().setStartingPoint(
-                req.getStartingPoint());
-        trip.getPreference().setSpecialNotes(
-                req.getSpecialNotes());
-    }
+        // ── Deterministic day/stop assembly — the backend, not the LLM,
+        // now decides which stops go on which day (Phase 4). ───────────
+        List<ItineraryAssemblyService.PlannedDay> plannedDays =
+                itineraryAssemblyService.assemble(
+                        origin, destinationPoint, req.getStartDate(),
+                        expectedDays, groupSize, budgetLevel,
+                        travelStylesList);
 
-    // Clear existing days
-    trip.getDays().clear();
-    tripRepository.save(trip);
+        if (plannedDays.stream().allMatch(d -> d.stops().isEmpty())) {
+            throw new RuntimeException(
+                    "Could not find any destinations/gems near this route to build an itinerary");
+        }
 
-    // Build new days from AI response
-    JsonNode daysNode = data.path("days");
-    DateTimeFormatter fmt = DateTimeFormatter.ofPattern("yyyy-MM-dd");
-
-    if (daysNode.isArray()) {
-        for (JsonNode dayNode : daysNode) {
-            int dayNumber = dayNode.path("dayNumber").asInt();
-
-            // Parse date
-            LocalDate dayDate;
-            try {
-                dayDate = LocalDate.parse(
-                        dayNode.path("date").asText(), fmt);
-            } catch (Exception e) {
-                dayDate = req.getStartDate().plusDays(dayNumber - 1);
+        // ── Ask the AI service to write narrative only (title, per-day
+        // theme/tips, per-stop description) for this fixed structure. A
+        // failure here degrades gracefully to generic text instead of
+        // failing the whole generation — the itinerary structure itself
+        // is already valid without the LLM's involvement. ──────────────
+        JsonNode narrativeData = null;
+        try {
+            JsonNode narrativeResp = aiService.generateNarrative(
+                    buildNarrativeRequestBody(req, travelStyle, budgetRange,
+                            startingPoint, trip.getToLocation(), groupSize, plannedDays)
+            ).block();
+            if (narrativeResp != null
+                    && narrativeResp.path("success").asBoolean(false)) {
+                narrativeData = narrativeResp.path("data");
             }
+        } catch (Exception e) {
+            log.warn("AI narrative generation failed, using generic day text: {}",
+                    e.getMessage());
+        }
+
+        // Update title with AI's title, but only if the user hasn't
+        // already customized it (renamed away from the auto-generated
+        // placeholder) since the trip was created.
+        String autoTitle = generateTripTitle(
+                trip.getFromLocation(), trip.getToLocation(),
+                trip.getStartDate(), trip.getEndDate());
+        String aiTitle = narrativeData != null
+                ? narrativeData.path("tripTitle").asText(null) : null;
+        boolean titleIsCustomized = trip.getTitle() != null
+                && !trip.getTitle().equals(autoTitle);
+        if (aiTitle != null && !aiTitle.isBlank() && !titleIsCustomized) {
+            trip.setTitle(aiTitle);
+        }
+        trip.setAiGenerated(true);
+
+        // Update preference
+        if (trip.getPreference() != null) {
+            trip.getPreference().setRegions(String.join(",", regions));
+            trip.getPreference().setInterests(String.join(",", interests));
+            trip.getPreference().setStartingPoint(startingPoint);
+            trip.getPreference().setSpecialNotes(req.getSpecialNotes());
+        }
+
+        // Clear existing days then rebuild from the planned structure
+        trip.getDays().clear();
+        tripRepository.save(trip);
+
+        for (ItineraryAssemblyService.PlannedDay pd : plannedDays) {
+            JsonNode narrativeDay = findNarrativeDay(narrativeData, pd.dayNumber());
+            String theme = textOrNull(narrativeDay, "theme");
+            String tips  = textOrNull(narrativeDay, "tips");
 
             TripDay day = TripDay.builder()
                     .trip(trip)
-                    .dayNumber(dayNumber)
-                    .date(dayDate)
-                    .region(dayNode.path("region").asText(null))
-                    .theme(dayNode.path("theme").asText(null))
-                    .tips(dayNode.path("tips").asText(null))
-                    .estimatedDayCost(
-                            dayNode.path("estimatedDayCost").asDouble(0))
+                    .dayNumber(pd.dayNumber())
+                    .date(pd.date())
+                    .region(pd.region())
+                    .theme(theme != null ? theme
+                            : "Day " + pd.dayNumber() + ": " + pd.region())
+                    .tips(tips)
+                    .estimatedDayCost(pd.estimatedDayCost())
                     .build();
 
-            // Add locations as GEM items
-            JsonNode locations = dayNode.path("locations");
-            int orderIndex = 0;
-            if (locations.isArray()) {
-                for (JsonNode loc : locations) {
-                    TripDayItem item = TripDayItem.builder()
-                            .tripDay(day)
-                            .type(TripDayItem.ItemType.ACTIVITY)
-                            .title(loc.asText())
-                            .cost(0.0)
-                            .currency("USD")
-                            .orderIndex(orderIndex++)
-                            .build();
-                    day.getItems().add(item);
+            List<ItineraryAssemblyService.PlannedStop> stops = pd.stops();
+            JsonNode narrativeStops = narrativeDay != null
+                    ? narrativeDay.path("stops") : null;
+            for (int i = 0; i < stops.size(); i++) {
+                ItineraryAssemblyService.PlannedStop stop = stops.get(i);
+                String description = (narrativeStops != null && narrativeStops.isArray()
+                        && i < narrativeStops.size())
+                        ? textOrNull(narrativeStops.get(i), "description")
+                        : null;
+
+                TripDayItem.ItemType itemType =
+                        stop.type() == ItineraryAssemblyService.StopType.GEM
+                                ? TripDayItem.ItemType.GEM
+                                : TripDayItem.ItemType.ACTIVITY;
+                String titlePrefix = switch (stop.type()) {
+                    case GEM   -> "Hidden Gem: ";
+                    case EVENT -> "Festival: ";
+                    case DESTINATION -> "";
+                };
+
+                StringBuilder notes = new StringBuilder(
+                        "[" + capitalizeSlot(stop.slot()) + "]");
+                if (description != null && !description.isBlank()) {
+                    notes.append(" ").append(description);
                 }
-            }
+                if (stop.type() == ItineraryAssemblyService.StopType.EVENT) {
+                    notes.append(" Special festival event on this day!");
+                }
 
-            // Add hidden gem if present
-            String hiddenGem = dayNode.path("hiddenGem").asText(null);
-            if (hiddenGem != null && !hiddenGem.equals("null")
-                    && !hiddenGem.isEmpty()) {
-                TripDayItem gemItem = TripDayItem.builder()
+                TripDayItem item = TripDayItem.builder()
                         .tripDay(day)
-                        .type(TripDayItem.ItemType.GEM)
-                        .title("Hidden Gem: " + hiddenGem)
-                        .cost(0.0)
+                        .type(itemType)
+                        .title(titlePrefix + stop.name())
+                        .referenceId(stop.referenceId() != null
+                                ? stop.referenceId().toString() : null)
+                        .cost(stop.costUsd() != null ? stop.costUsd() : 0.0)
                         .currency("USD")
-                        .orderIndex(orderIndex++)
+                        .orderIndex(i)
+                        .notes(notes.toString())
                         .build();
-                day.getItems().add(gemItem);
+                day.getItems().add(item);
             }
-
-            // Add festival event if present
-            String festivalEvent = dayNode.path("festivalEvent")
-                    .asText(null);
-            if (festivalEvent != null && !festivalEvent.equals("null")
-                    && !festivalEvent.isEmpty()) {
-                TripDayItem festItem = TripDayItem.builder()
-                        .tripDay(day)
-                        .type(TripDayItem.ItemType.ACTIVITY)
-                        .title("Festival: " + festivalEvent)
-                        .cost(0.0)
-                        .currency("USD")
-                        .orderIndex(orderIndex++)
-                        .notes("Special festival event on this day!")
-                        .build();
-                day.getItems().add(festItem);
-            }
-
-            // Add transport suggestion
-            String transport = dayNode.path("transport").asText(null);
-            if (transport != null && !transport.isEmpty()) {
-                TripDayItem transportItem = TripDayItem.builder()
-                        .tripDay(day)
-                        .type(TripDayItem.ItemType.TRANSPORT)
-                        .title("Transport: " + transport)
-                        .cost(0.0)
-                        .currency("USD")
-                        .orderIndex(orderIndex++)
-                        .build();
-                day.getItems().add(transportItem);
-            }
-
             trip.getDays().add(day);
         }
+
+        // Per-day monsoon check — flags each day's ACTUAL final region and
+        // date, unlike the pre-generation check the AI service already does
+        // internally against just the trip's single top-level destination.
+        Map<String, String> monsoonNoteByRegion = new HashMap<>();
+        for (TripDay day : trip.getDays()) {
+            String region = day.getRegion();
+            if (region == null || region.isBlank()
+                    || monsoonNoteByRegion.containsKey(region)) {
+                continue;
+            }
+            String note = null;
+            try {
+                JsonNode monsoonResp = aiService.checkMonsoon(
+                        List.of(region), day.getDate().toString(),
+                        day.getDate().toString()).block();
+                JsonNode monsoonData = monsoonResp != null
+                        ? monsoonResp.path("data") : null;
+                if (monsoonData != null
+                        && monsoonData.path("has_warning").asBoolean(false)
+                        && monsoonData.path("warnings").isArray()
+                        && !monsoonData.path("warnings").isEmpty()) {
+                    note = monsoonData.path("warnings").get(0)
+                            .path("recommendation").asText(null);
+                }
+            } catch (Exception e) {
+                log.warn("Monsoon check failed for region {}: {}",
+                        region, e.getMessage());
+            }
+            monsoonNoteByRegion.put(region, note);
+        }
+        for (TripDay day : trip.getDays()) {
+            String note = monsoonNoteByRegion.get(day.getRegion());
+            if (note != null && !note.isBlank()) {
+                String warningLine = "⚠️ Monsoon note: " + note;
+                String existingTips = day.getTips();
+                day.setTips(existingTips == null || existingTips.isBlank()
+                        ? warningLine
+                        : existingTips + " " + warningLine);
+            }
+        }
+
+        // ── Budget validation (fix 4) — warning only, no automatic
+        // destination substitution (out of scope, see NOTE in
+        // ItineraryAssemblyService.computeDayCost). Compares the
+        // itinerary's total estimated cost (USD, summed from each
+        // PlannedDay's real estimatedDayCost) against the user's numeric
+        // LKR budget target, if one was set. ─────────────────────────
+        if (req.getBudgetAmountLkr() != null) {
+            trip.setBudgetAmountLkr(req.getBudgetAmountLkr());
+        }
+        if (trip.getBudgetAmountLkr() != null && !trip.getDays().isEmpty()) {
+            double totalUsd = plannedDays.stream()
+                    .mapToDouble(ItineraryAssemblyService.PlannedDay::estimatedDayCost)
+                    .sum();
+            double totalLkr = totalUsd * USD_TO_LKR_RATE;
+            double budgetLkr = trip.getBudgetAmountLkr();
+            if (totalLkr > budgetLkr) {
+                double overPercent = ((totalLkr - budgetLkr) / budgetLkr) * 100.0;
+                String warningLine = String.format(
+                        "⚠️ Budget note: estimated cost (LKR %.0f) exceeds your budget of LKR %.0f by %.0f%%",
+                        totalLkr, budgetLkr, overPercent);
+                TripDay firstDay = trip.getDays().stream()
+                        .min(java.util.Comparator.comparingInt(TripDay::getDayNumber))
+                        .orElse(null);
+                if (firstDay != null) {
+                    String existingTips = firstDay.getTips();
+                    firstDay.setTips(existingTips == null || existingTips.isBlank()
+                            ? warningLine
+                            : existingTips + " " + warningLine);
+                }
+            }
+        }
+
+        // Per-day cost is already real (Phase 5): ItineraryAssemblyService
+        // computed each PlannedDay's estimatedDayCost from the actual
+        // chosen stops' entryFeeUsd + accommodation/food/transport
+        // estimates when the day was assembled above — no flat rate-table
+        // overwrite needed here anymore.
+
+        Trip saved = tripRepository.save(trip);
+        log.info("AI itinerary generated: {} days for trip {}",
+                saved.getDays().size(), req.getTripId());
+        return toResponse(saved);
     }
 
-    Trip saved = tripRepository.save(trip);
-    log.info("AI itinerary generated: {} days for trip {}",
-            saved.getDays().size(), req.getTripId());
-    return toResponse(saved);
+    // ── Narrative request body builder (Phase 6 contract) ──
+    // Sends the already-final day/stop structure to the AI service and
+    // asks it to only write narrative text for it — see AiService
+    // .generateNarrative() and ExploreCeylon-ai-service's
+    // prompt_builder.build_narrative_prompt().
+    private Map<String, Object> buildNarrativeRequestBody(
+            GenerateAiTripRequest req, String travelStyle, String budgetRange,
+            String startingPoint, String toLocation, int groupSize,
+            List<ItineraryAssemblyService.PlannedDay> plannedDays) {
+
+        List<Map<String, Object>> daysPayload = new ArrayList<>();
+        for (ItineraryAssemblyService.PlannedDay pd : plannedDays) {
+            List<Map<String, Object>> stopsPayload = new ArrayList<>();
+            for (ItineraryAssemblyService.PlannedStop stop : pd.stops()) {
+                Map<String, Object> stopMap = new HashMap<>();
+                stopMap.put("type", stop.type().name());
+                stopMap.put("name", stop.name());
+                stopMap.put("slot", stop.slot());
+                stopsPayload.add(stopMap);
+            }
+            Map<String, Object> dayMap = new HashMap<>();
+            dayMap.put("dayNumber", pd.dayNumber());
+            dayMap.put("date", pd.date().toString());
+            dayMap.put("region", pd.region());
+            dayMap.put("stops", stopsPayload);
+            daysPayload.add(dayMap);
+        }
+
+        Map<String, Object> body = new HashMap<>();
+        body.put("start_date",     req.getStartDate().toString());
+        body.put("end_date",       req.getEndDate().toString());
+        body.put("travel_style",   travelStyle);
+        body.put("budget_range",   budgetRange);
+        body.put("group_size",     groupSize);
+        body.put("starting_point", startingPoint);
+        body.put("to_location",    toLocation);
+        if (req.getSpecialNotes() != null) body.put("special_notes", req.getSpecialNotes());
+        body.put("days", daysPayload);
+        return body;
+    }
+
+    // Finds the narrative day matching a planned day number, tolerating a
+    // missing/malformed AI response entirely (narrativeData null) or a
+    // response that dropped/reordered days — index-by-dayNumber instead
+    // of assuming positional alignment.
+    private JsonNode findNarrativeDay(JsonNode narrativeData, int dayNumber) {
+        if (narrativeData == null) return null;
+        JsonNode days = narrativeData.path("days");
+        if (!days.isArray()) return null;
+        for (JsonNode d : days) {
+            if (d.path("dayNumber").asInt(-1) == dayNumber) return d;
+        }
+        return null;
+    }
+
+    private String textOrNull(JsonNode node, String field) {
+        if (node == null) return null;
+        String value = node.path(field).asText(null);
+        return (value == null || value.isBlank() || value.equalsIgnoreCase("null"))
+                ? null : value;
+    }
+
+    private String capitalizeSlot(String slot) {
+        if (slot == null || slot.isBlank()) return "Stop";
+        return slot.charAt(0) + slot.substring(1).toLowerCase();
     }
 
     // ── MAPPER: Trip → TripResponse ────────────────────────
@@ -364,11 +649,14 @@ public class TripService {
         TripResponse res = new TripResponse();
         res.setId(t.getId());
         res.setTitle(t.getTitle());
+        res.setFromLocation(t.getFromLocation());
+        res.setToLocation(t.getToLocation());
         res.setStartDate(t.getStartDate());
         res.setEndDate(t.getEndDate());
         res.setTravelStyle(t.getTravelStyle());
         res.setBudgetRange(t.getBudgetRange());
         res.setGroupSize(t.getGroupSize());
+        res.setBudgetAmountLkr(t.getBudgetAmountLkr());
         res.setStatus(t.getStatus());
         res.setAiGenerated(t.getAiGenerated());
         res.setShareToken(t.getShareToken());
@@ -381,6 +669,7 @@ public class TripService {
         }
 
         res.setDays(t.getDays().stream()
+                .sorted(java.util.Comparator.comparingInt(TripDay::getDayNumber))
                 .map(this::toDayResponse)
                 .collect(Collectors.toList()));
         return res;
@@ -398,6 +687,7 @@ public class TripService {
         res.setFestivalEventId(d.getFestivalEventId());
         res.setEstimatedDayCost(d.getEstimatedDayCost());
         res.setItems(d.getItems().stream()
+                .sorted(java.util.Comparator.comparingInt(TripDayItem::getOrderIndex))
                 .map(this::toItemResponse)
                 .collect(Collectors.toList()));
         return res;

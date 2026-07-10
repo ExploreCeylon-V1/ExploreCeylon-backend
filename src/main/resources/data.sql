@@ -125,7 +125,7 @@ SELECT * FROM (VALUES
      'Annual festival celebrating the coral reef ecosystem of Hikkaduwa. Snorkeling, diving events and beach activities.',
      'ENTERTAINMENT', 'Hikkaduwa', 'Hikkaduwa',
      '2026-03-01'::date, '2026-03-03'::date, true, NOW())
-)AS new_data (title, description, category, region,
+)AS new_data (title, description, category, region, location,
     start_date, end_date, is_recurring, created_at)
 WHERE NOT EXISTS (SELECT 1 FROM events LIMIT 1);
 
@@ -403,6 +403,355 @@ SELECT * FROM (VALUES
 WHERE NOT EXISTS (SELECT 1 FROM destinations LIMIT 1);
 
 
+-- Extra AI planning sample data for Colombo, Kalutara, Galle, Matara,
+-- Kegalle, Nuwara Eliya, Kandy and Ratnapura.
+-- These rows insert independently, so they can enrich an existing database.
+
+INSERT INTO destinations (name, district, province, description,
+    short_description, category, best_months, activities,
+    latitude, longitude, cover_image_url, travel_time_from,
+    entry_fee, opening_hours, featured, active,
+    rating, review_count, unesco_status, created_at, updated_at)
+SELECT * FROM (VALUES
+    ('Colombo Fort and Pettah Heritage Walk', 'Colombo', 'Western Province',
+     'A compact city route through Colombo Fort, Dutch Hospital, red-brick colonial buildings, Pettah market lanes, Jami Ul-Alfar Mosque exterior and local snack stops. Good first-day orientation for travelers arriving in Sri Lanka.',
+     'City heritage walk linking Fort, Pettah markets, colonial streets and local food stops.',
+     'CITY', 'January,February,March,April,July,August,December',
+     'city-walk,history,food,markets,photography',
+     6.9344, 79.8428, NULL,
+     'Airport:45min by road,Mount Lavinia:35min by road,Galle Face:10min by road',
+     'Free except museum or snack costs', 'Best 7:30 AM - 11:00 AM or 4:00 PM - 7:00 PM',
+     true, true, 4.5, 610, NULL, NOW(), NOW()),
+    ('Mount Lavinia Beach Sunset', 'Colombo', 'Western Province',
+     'A relaxed coastal stop south of Colombo with sunset views, seafood restaurants, colonial hotel history and an easy beach walk. Works well as a soft landing day after a flight.',
+     'Easy Colombo beach sunset stop with seafood, coastal views and relaxed evening atmosphere.',
+     'BEACH', 'January,February,March,April,December',
+     'beach,food,sunset,relaxation,photography',
+     6.8390, 79.8639, NULL,
+     'Colombo Fort:35min by road or train,Airport:1h by road',
+     'Beach free', 'Open all day',
+     true, true, 4.4, 480, NULL, NOW(), NOW()),
+    ('Kalutara Bodhiya and Richmond Castle', 'Kalutara', 'Western Province',
+     'A cultural half-day combining the sacred Kalutara Bodhiya, riverside views and Richmond Castle, a mansion blending Sri Lankan, Indian and British architecture.',
+     'Sacred temple, river views and colonial mansion visit in one easy Kalutara route.',
+     'CULTURAL', 'January,February,March,April,December',
+     'temples,architecture,history,river-views,photography',
+     6.5854, 79.9607, NULL,
+     'Colombo:1h 30min by road,Galle:1h 45min by road',
+     'Temple free. Richmond Castle small local entry fee', '8:00 AM - 5:00 PM',
+     false, true, 4.4, 320, NULL, NOW(), NOW()),
+    ('Bentota and Beruwala Coast', 'Kalutara', 'Western Province',
+     'A beach and lagoon corridor ideal for slow coastal travel, river safaris, water sports and relaxed seafood meals. Useful stop between Colombo and Galle.',
+     'Beach, lagoon, water sports and river safari stop between Colombo and Galle.',
+     'BEACH', 'November,December,January,February,March,April',
+     'beach,boat-safari,water-sports,food,relaxation',
+     6.4210, 79.9950, NULL,
+     'Colombo:1h 45min by road,Galle:1h 15min by road',
+     'Beach free. Boat safari extra', 'Open all day',
+     true, true, 4.6, 710, NULL, NOW(), NOW()),
+    ('Galle Fort Slow Day', 'Galle', 'Southern Province',
+     'A full day inside the UNESCO-listed Galle Fort with rampart walks, Dutch-era lanes, museums, cafes, lighthouse views, boutiques and sunset from the sea wall.',
+     'UNESCO fort day with rampart walks, cafes, colonial streets and lighthouse views.',
+     'HERITAGE', 'November,December,January,February,March,April',
+     'history,architecture,cafes,shopping,sunset,photography',
+     6.0269, 80.2167, NULL,
+     'Colombo:2h by expressway,Matara:1h by road,Mirissa:45min by road',
+     'Fort free. Museums optional', 'Open 24 hours',
+     true, true, 4.8, 2100, 'UNESCO World Heritage Site', NOW(), NOW()),
+    ('Hikkaduwa Coral and Beach', 'Galle', 'Southern Province',
+     'A lively beach town with coral gardens, snorkeling boats, surf breaks and turtle sightings. Good for travelers wanting beach energy near Galle.',
+     'Snorkeling, surf, coral gardens and beach cafes on the Galle coast.',
+     'BEACH', 'November,December,January,February,March,April',
+     'snorkeling,surfing,beach,seafood,photography',
+     6.1395, 80.1063, NULL,
+     'Galle:25min by road,Colombo:2h by road',
+     'Beach free. Snorkeling boat extra', 'Open all day',
+     false, true, 4.5, 890, NULL, NOW(), NOW()),
+    ('Mirissa Whale Watching and Coconut Tree Hill', 'Matara', 'Southern Province',
+     'A southern coast highlight combining early morning whale watching, relaxed Mirissa beach time and sunset photos from Coconut Tree Hill.',
+     'Whale watching, beach time and Coconut Tree Hill sunset in Mirissa.',
+     'BEACH', 'November,December,January,February,March,April',
+     'whale-watching,beach,sunset,photography,seafood',
+     5.9483, 80.4716, NULL,
+     'Galle:45min by road,Matara:25min by road,Colombo:3h by road',
+     'Beach free. Whale watching USD 35-50', 'Whale boats usually 6:00 AM - 7:00 AM',
+     true, true, 4.7, 1450, NULL, NOW(), NOW()),
+    ('Weligama Surf and Ahangama Cafes', 'Matara', 'Southern Province',
+     'A beginner-friendly surf coast with board rentals, surf schools, seafood shacks and a growing cafe scene between Weligama and Ahangama.',
+     'Beginner surf, beach cafes and relaxed south-coast energy.',
+     'SURF', 'November,December,January,February,March,April',
+     'surfing,beach,cafes,food,relaxation',
+     5.9730, 80.4297, NULL,
+     'Galle:35min by road,Mirissa:20min by road,Matara:30min by road',
+     'Beach free. Surf lesson USD 15-30', 'Best surf mornings and late afternoons',
+     false, true, 4.6, 780, NULL, NOW(), NOW()),
+    ('Pinnawala Elephant Orphanage and River View', 'Kegalle', 'Sabaragamuwa Province',
+     'A popular Kegalle stop known for elephants and riverside viewing. Best used as a short stop between Colombo and Kandy, with ethical expectations explained clearly to travelers.',
+     'Elephant and riverside stop on the Colombo to Kandy road.',
+     'WILDLIFE', 'January,February,March,April,July,August,December',
+     'wildlife,river-views,photography,family',
+     7.3008, 80.3889, NULL,
+     'Colombo:2h 30min by road,Kandy:1h 30min by road',
+     'Ticketed attraction', '8:30 AM - 5:30 PM',
+     false, true, 4.2, 970, NULL, NOW(), NOW()),
+    ('Kitulgala Adventure and Kelani River', 'Kegalle', 'Sabaragamuwa Province',
+     'Sri Lanka adventure hub for white-water rafting, rainforest walks, canyoning and birding along the Kelani River. Ideal for active travelers between Colombo and hill country.',
+     'Rafting, rainforest walks and river adventure between Colombo and Kandy.',
+     'ADVENTURE', 'January,February,March,April,August,September,December',
+     'rafting,trekking,birdwatching,canyoning,adventure',
+     6.9894, 80.4197, NULL,
+     'Colombo:2h 45min by road,Kandy:2h 30min by road,Nuwara Eliya:2h 30min by road',
+     'Rafting packages vary by operator', 'Best 8:00 AM - 4:00 PM',
+     true, true, 4.8, 640, NULL, NOW(), NOW()),
+    ('Nuwara Eliya Tea Country and Gregory Lake', 'Nuwara Eliya', 'Central Province',
+     'A cool-climate hill-country day with tea estate visits, colonial streets, Gregory Lake, strawberry stops and misty viewpoints.',
+     'Tea estates, cool climate, colonial streets and Gregory Lake in Little England.',
+     'HILL', 'January,February,March,April,December',
+     'tea-tours,lake,photography,walking,relaxation',
+     6.9497, 80.7891, NULL,
+     'Kandy:2h 30min by road,Ella:2h 15min by road,Colombo:5h by road',
+     'Lake activities extra. Tea factory tours may charge small fee', 'Open all day',
+     true, true, 4.6, 1250, NULL, NOW(), NOW()),
+    ('Horton Plains and Worlds End', 'Nuwara Eliya', 'Central Province',
+     'A highland national park walk through cloud forest and grassland to Worlds End viewpoint and Bakers Falls. Best started before sunrise for clear views.',
+     'Cloud forest hike to Worlds End viewpoint and Bakers Falls.',
+     'HILL', 'January,February,March,April,July,August,December',
+     'hiking,wildlife,photography,nature,birdwatching',
+     6.8021, 80.8070, NULL,
+     'Nuwara Eliya:1h by road,Ella:2h 30min by road',
+     'Ticketed national park entry', '6:00 AM - 6:00 PM',
+     true, true, 4.8, 980, NULL, NOW(), NOW()),
+    ('Temple of the Tooth and Kandy Lake', 'Kandy', 'Central Province',
+     'A sacred cultural route around Sri Dalada Maligawa, Kandy Lake, old city streets and evening cultural performance. Strong choice for first-time visitors.',
+     'Sacred temple, lake walk and Kandyan culture in the hill capital.',
+     'RELIGIOUS', 'January,February,March,July,August,December',
+     'temples,culture,history,lake-walk,photography',
+     7.2936, 80.6413, NULL,
+     'Colombo:3h by road or train,Nuwara Eliya:2h 30min by road,Sigiriya:2h 30min by road',
+     'Temple foreigner ticket applies', 'Temple 5:30 AM - 8:00 PM',
+     true, true, 4.8, 2200, 'UNESCO World Heritage Site', NOW(), NOW()),
+    ('Peradeniya Botanical Gardens', 'Kandy', 'Central Province',
+     'A grand botanical garden near Kandy with royal palms, orchids, giant bamboo, open lawns and riverside walking paths. Excellent slow half-day for families and couples.',
+     'Royal botanical gardens with orchids, palm avenues and riverside walks.',
+     'HILL', 'January,February,March,April,July,August,December',
+     'gardens,walking,photography,family,relaxation',
+     7.2717, 80.5953, NULL,
+     'Kandy:25min by road,Colombo:3h by road',
+     'Ticketed garden entry', '7:30 AM - 5:30 PM',
+     false, true, 4.7, 1300, NULL, NOW(), NOW()),
+    ('Ratnapura Gem City and Market', 'Ratnapura', 'Sabaragamuwa Province',
+     'Sri Lanka gem capital with gem museums, traditional mining stories, local markets and routes toward Sinharaja and Adam''s Peak. Best for culture, crafts and local trade insight.',
+     'Gem museums, markets and mining heritage in Sri Lanka sapphire capital.',
+     'CULTURAL', 'January,February,March,April,December',
+     'gems,markets,culture,history,photography',
+     6.6828, 80.3992, NULL,
+     'Colombo:2h 45min by road,Nuwara Eliya:3h by road,Kitulgala:1h 45min by road',
+     'Museum ticket may apply', 'Best 9:00 AM - 4:00 PM',
+     false, true, 4.5, 540, NULL, NOW(), NOW()),
+    ('Sinharaja Rainforest Edge', 'Ratnapura', 'Sabaragamuwa Province',
+     'A biodiversity-rich rainforest experience from the Ratnapura side of Sinharaja, suitable for birding, nature walks, endemic species and slow eco-travel.',
+     'Rainforest walks, endemic birds and eco-travel from the Ratnapura side.',
+     'WILDLIFE', 'January,February,March,April,August,September,December',
+     'rainforest,birdwatching,walking,wildlife,photography',
+     6.4088, 80.4820, NULL,
+     'Ratnapura:2h by road,Galle:2h 30min by road,Colombo:4h by road',
+     'Forest entry and guide fee apply', '6:30 AM - 5:00 PM',
+     true, true, 4.9, 720, 'UNESCO World Heritage Site', NOW(), NOW())
+) AS new_data (name, district, province, description,
+    short_description, category, best_months, activities,
+    latitude, longitude, cover_image_url, travel_time_from,
+    entry_fee, opening_hours, featured, active,
+    rating, review_count, unesco_status, created_at, updated_at)
+WHERE NOT EXISTS (
+    SELECT 1 FROM destinations d WHERE LOWER(d.name) = LOWER(new_data.name)
+);
+
+INSERT INTO hidden_gems (title, description, category, district,
+    latitude, longitude, how_to_get_there, best_time, tips,
+    approved, rating, review_count, created_at, updated_at)
+SELECT * FROM (VALUES
+    ('Diyatha Uyana Evening Walk',
+     'A calm lakeside market and walking area near Battaramulla with food kiosks, sunset reflections and local weekend atmosphere.',
+     'VILLAGE', 'Colombo', 6.9048, 79.9088,
+     'Take a taxi or tuk-tuk from Colombo city toward Battaramulla. Best combined with Parliament lake area.',
+     'Evenings year round', 'Good low-effort first evening after arrival. Carry cash for snacks.',
+     true, 4.4, 210, NOW(), NOW()),
+    ('Seema Malaka Quiet Temple Stop',
+     'A peaceful temple pavilion on Beira Lake designed by Geoffrey Bawa, useful as a short reflective stop in busy Colombo.',
+     'TEMPLE', 'Colombo', 6.9169, 79.8545,
+     'Walk or taxi from Gangaramaya Temple. It is beside Beira Lake in central Colombo.',
+     'Early morning or late afternoon', 'Dress modestly. Combine with Gangaramaya and Galle Face.',
+     true, 4.5, 185, NOW(), NOW()),
+    ('Fa Hien Cave',
+     'A major prehistoric cave site near Bulathsinhala connected with early human habitation in Sri Lanka, surrounded by forested limestone scenery.',
+     'RUINS', 'Kalutara', 6.6442, 80.1758,
+     'From Kalutara or Horana travel to Bulathsinhala, then continue by local road to the cave temple area.',
+     'January to April and December', 'Wear shoes with grip. Steps can be slippery after rain.',
+     true, 4.6, 120, NOW(), NOW()),
+    ('Thudugala Ella',
+     'A small waterfall and natural pool hidden in rubber estate country near Dodangoda, good for a short nature break from the coastal road.',
+     'WATERFALL', 'Kalutara', 6.5625, 80.0602,
+     'From Kalutara take the Dodangoda road and ask locals for Thudugala Falls. Short walk from the village road.',
+     'December to April', 'Avoid after heavy rain. Go with locals if unfamiliar with the path.',
+     true, 4.5, 160, NOW(), NOW()),
+    ('Japanese Peace Pagoda Rumassala',
+     'A white hilltop pagoda above Unawatuna with ocean views, forest paths and a quieter spiritual atmosphere near Galle.',
+     'TEMPLE', 'Galle', 6.0186, 80.2402,
+     'Take a tuk-tuk from Galle Fort or Unawatuna to Rumassala, then walk the final path.',
+     'November to April', 'Best near sunset. Dress respectfully and keep voices low.',
+     true, 4.7, 390, NOW(), NOW()),
+    ('Kanneliya Rainforest Edge',
+     'A lush rainforest reserve north of Galle with streams, endemic plants, waterfalls and guided nature trails.',
+     'VIEWPOINT', 'Galle', 6.2511, 80.3372,
+     'Drive from Galle via Udugama. Hire an official guide at the forest entrance.',
+     'January to April and August', 'Leech socks are useful. Start early and carry water.',
+     true, 4.8, 240, NOW(), NOW()),
+    ('Dondra Head Lighthouse',
+     'Sri Lanka southernmost lighthouse with strong ocean views, palm-lined roads and quiet coastal photography spots.',
+     'VIEWPOINT', 'Matara', 5.9218, 80.5940,
+     'From Matara town take a tuk-tuk or bus toward Dondra. The lighthouse is near the point.',
+     'November to April', 'Ask permission before entering lighthouse grounds. Best light is morning.',
+     true, 4.6, 260, NOW(), NOW()),
+    ('Madiha Turtle Coast',
+     'A quieter reef and beach area near Matara where turtles are often seen from the shore, with small cafes and calm swimming pockets.',
+     'BEACH', 'Matara', 5.9368, 80.5156,
+     'Take a tuk-tuk from Matara or Mirissa toward Madiha. Walk along the reef-side beach.',
+     'November to April', 'Do not touch turtles or stand on reef. Bring reef-safe sunscreen.',
+     true, 4.7, 310, NOW(), NOW()),
+    ('Belilena Cave Kitulgala',
+     'A cave near Kitulgala linked to prehistoric Balangoda Man discoveries, reached through forest and village paths.',
+     'RUINS', 'Kegalle', 7.0021, 80.4315,
+     'From Kitulgala town hire a local guide or tuk-tuk to the trailhead, then walk uphill through forest.',
+     'January to April and August', 'Trail is muddy after rain. Combine with rafting for an adventure day.',
+     true, 4.6, 130, NOW(), NOW()),
+    ('Bopath Ella Stopover',
+     'A photogenic waterfall shaped like a Bo leaf, commonly visited by locals but still useful as a refreshing route break near Ratnapura and Kegalle routes.',
+     'WATERFALL', 'Kegalle', 6.8017, 80.3689,
+     'Reach via Kuruwita from Ratnapura or through Avissawella routes. Short walk from parking area.',
+     'December to April', 'Can be crowded on weekends. Avoid swimming in strong flow.',
+     true, 4.5, 330, NOW(), NOW()),
+    ('Lovers Leap Waterfall Nuwara Eliya',
+     'A scenic waterfall above tea estates near Nuwara Eliya, reached by a short uphill walk with views over the town.',
+     'WATERFALL', 'Nuwara Eliya', 6.9675, 80.7913,
+     'Start near Pedro Tea Estate and follow the uphill path. Tuk-tuk from town takes about 15 minutes.',
+     'January to April', 'Morning is clearest. Wear shoes suitable for wet paths.',
+     true, 4.7, 280, NOW(), NOW()),
+    ('Moon Plains Viewpoint',
+     'A highland viewpoint near Nuwara Eliya with open grasslands, wind, mist and 360-degree mountain views on clear mornings.',
+     'VIEWPOINT', 'Nuwara Eliya', 6.9283, 80.8289,
+     'Drive or tuk-tuk from Nuwara Eliya town to the Moon Plains entrance.',
+     'January to April and December', 'Go early before cloud cover. Take a jacket.',
+     true, 4.6, 245, NOW(), NOW()),
+    ('Degaldoruwa Cave Temple',
+     'A lesser-visited cave temple near Kandy with Kandyan-era murals, quiet courtyards and strong cultural value.',
+     'TEMPLE', 'Kandy', 7.3129, 80.6932,
+     'Take a tuk-tuk from Kandy toward Amunugama. Ask for Degaldoruwa Raja Maha Viharaya.',
+     'Year round', 'Visit with a respectful dress code. A local caretaker may explain murals.',
+     true, 4.6, 150, NOW(), NOW()),
+    ('Hanthana Tea and View Trail',
+     'A scenic tea-country ridge near Kandy with city views, cool air and short hiking possibilities without traveling far.',
+     'VIEWPOINT', 'Kandy', 7.2547, 80.6122,
+     'Take a tuk-tuk from Kandy toward Hanthana. Start from tea estate roads or the Ceylon Tea Museum area.',
+     'January to April and July to September', 'Best early morning. Mist can arrive quickly.',
+     true, 4.7, 290, NOW(), NOW()),
+    ('Gem Mine Village Visit Elapatha',
+     'A traditional gem mining village area near Ratnapura where travelers can understand sapphire mining culture and local livelihoods.',
+     'VILLAGE', 'Ratnapura', 6.6489, 80.3695,
+     'From Ratnapura town hire a local tuk-tuk toward Elapatha and arrange a visit through a known local contact.',
+     'January to April and December', 'Do not enter pits without permission. Agree price before visiting.',
+     true, 4.5, 115, NOW(), NOW()),
+    ('Katugas Ella',
+     'A forest-fringed waterfall close to Ratnapura town, useful for a short nature break after gem market visits.',
+     'WATERFALL', 'Ratnapura', 6.7154, 80.3851,
+     'Take a tuk-tuk from Ratnapura town toward the Katugas Ella access path.',
+     'December to April', 'Path can be slippery. Avoid swimming during rain.',
+     true, 4.4, 170, NOW(), NOW())
+) AS new_data (title, description, category, district,
+    latitude, longitude, how_to_get_there, best_time, tips,
+    approved, rating, review_count, created_at, updated_at)
+WHERE NOT EXISTS (
+    SELECT 1 FROM hidden_gems g WHERE LOWER(g.title) = LOWER(new_data.title)
+);
+
+INSERT INTO events (title, description, category, region, location,
+    start_date, end_date, is_recurring, created_at)
+SELECT * FROM (VALUES
+    ('Colombo Street Food Weekend',
+     'A food-focused weekend around Galle Face, Pettah snacks, kottu, isso wade, hoppers and modern Sri Lankan cafes. Useful for city arrival itineraries.',
+     'FOOD', 'Colombo', 'Colombo Fort and Galle Face',
+     '2026-08-21'::date, '2026-08-23'::date, true, NOW()),
+    ('Kalutara Coastal Temple Season',
+     'A local cultural period highlighting Kalutara Bodhiya visits, riverside evening walks and coastal temple stops between Colombo and Bentota.',
+     'RELIGIOUS', 'Kalutara', 'Kalutara Bodhiya',
+     '2026-12-04'::date, '2026-12-06'::date, true, NOW()),
+    ('Galle Fort Art and Heritage Days',
+     'A heritage weekend inside Galle Fort with art walks, fort architecture tours, cafe events and sunset rampart gatherings.',
+     'ENTERTAINMENT', 'Galle', 'Galle Fort',
+     '2026-11-20'::date, '2026-11-22'::date, true, NOW()),
+    ('Matara Southern Coast Surf Week',
+     'A south coast surf and beach week around Weligama, Madiha, Mirissa and Ahangama with beginner lessons and sunset gatherings.',
+     'SURF', 'Matara', 'Weligama and Mirissa',
+     '2026-12-10'::date, '2026-12-17'::date, true, NOW()),
+    ('Kitulgala River Adventure Season',
+     'A practical adventure window for rafting, rainforest walks and canyoning around Kitulgala when river conditions are usually suitable.',
+     'ENTERTAINMENT', 'Kegalle', 'Kitulgala',
+     '2026-08-01'::date, '2026-09-15'::date, true, NOW()),
+    ('Nuwara Eliya Tea and Garden Weekend',
+     'A cool-climate weekend for tea estate visits, Gregory Lake walks, garden stops and misty hill-country photography.',
+     'ENTERTAINMENT', 'Nuwara Eliya', 'Nuwara Eliya Town',
+     '2026-12-18'::date, '2026-12-20'::date, true, NOW()),
+    ('Kandy Esala Cultural Nights',
+     'Cultural evenings around the Kandy Esala season with temple visits, dance shows, drumming and lake-side night walks.',
+     'FESTIVAL', 'Kandy', 'Kandy City',
+     '2026-08-03'::date, '2026-08-13'::date, true, NOW()),
+    ('Ratnapura Gem and Rainforest Week',
+     'A local culture and nature week connecting gem-market visits, traditional mining stories and rainforest-edge day trips.',
+     'ENTERTAINMENT', 'Ratnapura', 'Ratnapura Town',
+     '2026-12-07'::date, '2026-12-13'::date, true, NOW())
+) AS new_data (title, description, category, region, location,
+    start_date, end_date, is_recurring, created_at)
+WHERE NOT EXISTS (
+    SELECT 1 FROM events e WHERE LOWER(e.title) = LOWER(new_data.title)
+);
+
+UPDATE events SET latitude = 6.9271, longitude = 79.8449
+WHERE title IN ('Colombo Food Festival', 'Colombo Street Food Weekend')
+  AND latitude IS NULL;
+
+UPDATE events SET latitude = 6.5854, longitude = 79.9607
+WHERE title = 'Kalutara Coastal Temple Season'
+  AND latitude IS NULL;
+
+UPDATE events SET latitude = 6.0269, longitude = 80.2167
+WHERE title IN ('Galle Literary Festival', 'Christmas in Galle Fort',
+                'Galle Fort Art and Heritage Days')
+  AND latitude IS NULL;
+
+UPDATE events SET latitude = 6.1395, longitude = 80.1063
+WHERE title = 'Hikkaduwa Coral Festival'
+  AND latitude IS NULL;
+
+UPDATE events SET latitude = 5.9483, longitude = 80.4716
+WHERE title IN ('Whale Watching Season â€” Mirissa',
+                'Matara Southern Coast Surf Week')
+  AND latitude IS NULL;
+
+UPDATE events SET latitude = 6.9894, longitude = 80.4197
+WHERE title = 'Kitulgala River Adventure Season'
+  AND latitude IS NULL;
+
+UPDATE events SET latitude = 6.9497, longitude = 80.7891
+WHERE title = 'Nuwara Eliya Tea and Garden Weekend'
+  AND latitude IS NULL;
+
+UPDATE events SET latitude = 7.2936, longitude = 80.6413
+WHERE title IN ('Esala Perahera', 'Kandy Esala Cultural Nights')
+  AND latitude IS NULL;
+
+UPDATE events SET latitude = 6.6828, longitude = 80.3992
+WHERE title = 'Ratnapura Gem and Rainforest Week'
+  AND latitude IS NULL;
+
 INSERT INTO users (name, email, password, role, nationality, created_at, updated_at)
 SELECT * FROM (VALUES
     ('Admin User',
@@ -431,3 +780,58 @@ SELECT * FROM (VALUES
      NOW(), NOW())
 ) AS new_data (name, email, password, role, nationality, created_at, updated_at)
 WHERE NOT EXISTS (SELECT 1 FROM users LIMIT 1);
+
+-- ─────────────────────────────────────────────────────────────
+-- Booking status migration: old 6-state enum → new 4-state enum.
+-- Idempotent — runs on every startup (spring.sql.init.mode=always),
+-- affects 0 rows once all bookings use the new names.
+--   PENDING      → PENDING_PAYMENT
+--   ADVANCE_PAID → CONFIRMED   (20% advance paid)
+--   FULLY_PAID   → COMPLETED   (80% balance paid)
+--   CONFIRMED / COMPLETED / CANCELLED unchanged
+-- ─────────────────────────────────────────────────────────────
+UPDATE guide_bookings   SET status = 'PENDING_PAYMENT' WHERE status = 'PENDING';
+UPDATE guide_bookings   SET status = 'CONFIRMED'       WHERE status = 'ADVANCE_PAID';
+UPDATE guide_bookings   SET status = 'COMPLETED'       WHERE status = 'FULLY_PAID';
+UPDATE vehicle_bookings SET status = 'PENDING_PAYMENT' WHERE status = 'PENDING';
+UPDATE vehicle_bookings SET status = 'CONFIRMED'       WHERE status = 'ADVANCE_PAID';
+UPDATE vehicle_bookings SET status = 'COMPLETED'       WHERE status = 'FULLY_PAID';
+
+-- ─────────────────────────────────────────────────────────────
+-- Location gazetteer seed (fix 1): place-name → coordinates lookup
+-- for trip-planning "from"/"to" geocoding, separate from the
+-- destinations table. Idempotent — ON CONFLICT (name) DO NOTHING.
+-- Mirrored in src/main/resources/data/locations_seed.sql for review.
+-- ─────────────────────────────────────────────────────────────
+INSERT INTO locations (name, latitude, longitude) VALUES
+    ('Colombo',       6.9271, 79.8612),
+    ('Kandy',         7.2906, 80.6337),
+    ('Galle',         6.0535, 80.2210),
+    ('Ella',          6.8667, 81.0466),
+    ('Mirissa',       5.9483, 80.4589),
+    ('Nuwara Eliya',  6.9497, 80.7891),
+    ('Jaffna',        9.6615, 80.0255),
+    ('Trincomalee',   8.5874, 81.2152),
+    ('Batticaloa',    7.7102, 81.6924),
+    ('Anuradhapura',  8.3114, 80.4037),
+    ('Polonnaruwa',   7.9403, 81.0188),
+    ('Sigiriya',      7.9570, 80.7603),
+    ('Dambulla',      7.8675, 80.6517),
+    ('Negombo',       7.2083, 79.8358),
+    ('Bentota',       6.4260, 79.9955),
+    ('Hikkaduwa',     6.1408, 80.1018),
+    ('Unawatuna',     6.0108, 80.2495),
+    ('Tangalle',      6.0244, 80.7934),
+    ('Arugam Bay',    6.8400, 81.8360),
+    ('Yala',          6.3728, 81.5165),
+    ('Udawalawe',     6.4675, 80.8974),
+    ('Ratnapura',     6.6828, 80.4126),
+    ('Kegalle',       7.2513, 80.3464),
+    ('Kitulgala',     6.9908, 80.4197),
+    ('Badulla',       6.9895, 81.0557),
+    ('Haputale',      6.7676, 80.9564),
+    ('Bandarawela',   6.8333, 80.9833),
+    ('Matara',        5.9549, 80.5550),
+    ('Kalutara',      6.5854, 79.9607),
+    ('Beruwala',      6.4788, 79.9828)
+ON CONFLICT (name) DO NOTHING;

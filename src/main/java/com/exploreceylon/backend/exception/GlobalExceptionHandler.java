@@ -31,6 +31,14 @@ public class GlobalExceptionHandler {
                 .body(Map.of("error", "Invalid email or password"));
     }
 
+    // Verification rate limiting — cooldown, hourly cap, abuse lockout
+    @ExceptionHandler(com.exploreceylon.backend.exception.RateLimitException.class)
+    public ResponseEntity<Map<String, String>> handleRateLimit(
+            com.exploreceylon.backend.exception.RateLimitException ex) {
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                .body(Map.of("error", ex.getMessage()));
+    }
+
     // Runtime errors
     @ExceptionHandler(RuntimeException.class)
     public ResponseEntity<Map<String, String>> handleRuntime(

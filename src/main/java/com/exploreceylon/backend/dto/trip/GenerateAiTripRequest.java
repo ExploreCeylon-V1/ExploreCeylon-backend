@@ -20,13 +20,18 @@ public class GenerateAiTripRequest {
     private LocalDate endDate;
 
     private Trip.TravelStyle travelStyle;
+    private List<Trip.TravelStyle> travelStyles;
     private Trip.BudgetRange budgetRange;
 
     @NotNull(message = "Group size is required")
     private Integer groupSize;
 
+    private Double budgetAmountLkr;
+
     private List<String> regions;
     private List<String> interests;
     private String startingPoint;
     private String specialNotes;
+    private String fromLocation;
+    private String toLocation;
 }

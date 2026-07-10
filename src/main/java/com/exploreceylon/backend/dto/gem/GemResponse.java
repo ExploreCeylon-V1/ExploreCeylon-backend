@@ -23,4 +23,9 @@ public class GemResponse {
     private Double rating;
     private Integer reviewCount;
     private LocalDateTime createdAt;
+    private String seasonMonths;
+    private String travelStyleTags;
+    private com.exploreceylon.backend.model.BudgetLevel budgetLevel;
+    private Double entryFeeUsd;
+    private Integer visitDurationMinutes;
 }

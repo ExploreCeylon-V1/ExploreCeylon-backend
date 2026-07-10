@@ -87,6 +87,18 @@ public class DestinationService {
         return toResponse(dest);
     }
 
+    // ── Nearby (distance-sorted, for AI trip planning) ─────
+    // Pushed to a SQL-level haversine ORDER BY (DestinationRepository
+    // .findNearestTo) instead of loading every active row into Java and
+    // sorting there — see repository for the query.
+    public List<DestinationResponse> findNearby(
+            double lat, double lng, int limit) {
+        return destinationRepository.findNearestTo(lat, lng, limit)
+                .stream()
+                .map(this::toResponse)
+                .collect(Collectors.toList());
+    }
+
     // ── Search ─────────────────────────────────────────────
     public List<DestinationResponse> search(String keyword) {
         log.info("Searching destinations: {}", keyword);
@@ -122,6 +134,10 @@ public class DestinationService {
                 .unescoStatus(req.getUnescoStatus())
                 .nearbyGems(req.getNearbyGems())
                 .active(req.getActive() != null ? req.getActive() : true)
+                .entryFeeUsd(req.getEntryFeeUsd())
+                .visitDurationMinutes(req.getVisitDurationMinutes())
+                .budgetLevel(req.getBudgetLevel())
+                .travelStyleTags(req.getTravelStyleTags())
                 .build();
         return toResponse(destinationRepository.save(dest));
     }
@@ -144,6 +160,7 @@ public class DestinationService {
         if (req.getLatitude()        != null) dest.setLatitude(req.getLatitude());
         if (req.getLongitude()       != null) dest.setLongitude(req.getLongitude());
         if (req.getCoverImageUrl()   != null) dest.setCoverImageUrl(req.getCoverImageUrl());
+        if (req.getImageUrls()        != null) dest.setImageUrls(req.getImageUrls());
         if (req.getTravelTimeFrom()  != null) dest.setTravelTimeFrom(req.getTravelTimeFrom());
         if (req.getEntryFee()        != null) dest.setEntryFee(req.getEntryFee());
         if (req.getOpeningHours()    != null) dest.setOpeningHours(req.getOpeningHours());
@@ -151,6 +168,10 @@ public class DestinationService {
         if (req.getUnescoStatus()    != null) dest.setUnescoStatus(req.getUnescoStatus());
         if (req.getNearbyGems()      != null) dest.setNearbyGems(req.getNearbyGems());
         if (req.getActive()          != null) dest.setActive(req.getActive());
+        if (req.getEntryFeeUsd()     != null) dest.setEntryFeeUsd(req.getEntryFeeUsd());
+        if (req.getVisitDurationMinutes() != null) dest.setVisitDurationMinutes(req.getVisitDurationMinutes());
+        if (req.getBudgetLevel()     != null) dest.setBudgetLevel(req.getBudgetLevel());
+        if (req.getTravelStyleTags() != null) dest.setTravelStyleTags(req.getTravelStyleTags());
 
         return toResponse(destinationRepository.save(dest));
     }
@@ -199,6 +220,10 @@ public class DestinationService {
         res.setReviewCount(d.getReviewCount());
         res.setUnescoStatus(d.getUnescoStatus());
         res.setNearbyGems(d.getNearbyGems());
+        res.setEntryFeeUsd(d.getEntryFeeUsd());
+        res.setVisitDurationMinutes(d.getVisitDurationMinutes());
+        res.setBudgetLevel(d.getBudgetLevel());
+        res.setTravelStyleTags(d.getTravelStyleTags());
         return res;
     }
 

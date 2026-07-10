@@ -31,13 +31,24 @@ public class User implements UserDetails {
     @Column(nullable = false, unique = true)
     private String email;
 
-    @Column(nullable = false)
+    // Nullable: Google-only users have no password until they set one.
+    @Column(nullable = true)
     private String password;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     @Builder.Default
     private Role role = Role.TRAVELER;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    @Builder.Default
+    private AuthProvider authProvider = AuthProvider.LOCAL;
+
+    // Google's stable "sub" claim. Set on first Google sign-in/linking; never used to
+    // decide authProvider on its own — a LOCAL user can hold a googleId and still be LOCAL.
+    @Column(unique = true)
+    private String googleId;
 
     private String nationality;
 
@@ -47,6 +58,15 @@ public class User implements UserDetails {
     private String phone;
 
     private String profilePhoto;
+
+    @Builder.Default
+    private Boolean emailVerified = false;
+
+    @Builder.Default
+    private Boolean phoneVerified = false;
+
+    @Builder.Default
+    private Boolean active = true;
 
     @Column(updatable = false)
     private LocalDateTime createdAt;
@@ -85,10 +105,15 @@ public class User implements UserDetails {
     public boolean isCredentialsNonExpired(){ return true; }
 
     @Override
-    public boolean isEnabled()              { return true; }
+    public boolean isEnabled()              { return active == null || active; }
 
     // ── Role Enum ──────────────────────────────────────────────
     public enum Role {
         TRAVELER, ADMIN
+    }
+
+    // ── Auth Provider Enum ────────────────────────────────────
+    public enum AuthProvider {
+        LOCAL, GOOGLE
     }
 }

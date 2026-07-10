@@ -12,6 +12,9 @@ import java.util.List;
 @Repository
 public interface EventRepository extends JpaRepository<Event, Long> {
 
+    // Get by title (used to resolve AI-generated itinerary items back to DB rows)
+    java.util.Optional<Event> findByTitleIgnoreCase(String title);
+
     // Filter by category
     List<Event> findByCategoryOrderByStartDate(Event.EventCategory category);
 
@@ -52,4 +55,26 @@ public interface EventRepository extends JpaRepository<Event, Long> {
     List<Event> findByMonthAndRegion(
             @Param("month") int month,
             @Param("region") String region);
+
+    // Events overlapping the trip dates AND within radiusKm of a point —
+    // coarse SQL pre-filter for corridor-aware event selection (Phase 3).
+    // Events without coordinates are excluded here since there's nothing
+    // to measure distance against; date-only matching still happens via
+    // findEventsBetweenDates for callers that don't need proximity.
+    @Query(value =
+            "SELECT * FROM events e WHERE " +
+            "e.start_date <= :endDate AND e.end_date >= :startDate " +
+            "AND e.latitude IS NOT NULL AND e.longitude IS NOT NULL " +
+            "AND (6371 * ACOS(LEAST(1.0, GREATEST(-1.0, " +
+            "COS(RADIANS(:lat)) * COS(RADIANS(e.latitude)) * " +
+            "COS(RADIANS(e.longitude) - RADIANS(:lng)) + " +
+            "SIN(RADIANS(:lat)) * SIN(RADIANS(e.latitude)))))) <= :radiusKm " +
+            "ORDER BY e.start_date",
+            nativeQuery = true)
+    List<Event> findEventsBetweenDatesWithinRadius(
+            @Param("startDate") LocalDate startDate,
+            @Param("endDate") LocalDate endDate,
+            @Param("lat") double lat,
+            @Param("lng") double lng,
+            @Param("radiusKm") double radiusKm);
 }

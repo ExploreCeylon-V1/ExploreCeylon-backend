@@ -3,10 +3,18 @@ package com.exploreceylon.backend.config;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.web.client.RestTemplate;
 import org.springframework.web.reactive.function.client.WebClient;
 
 @Configuration
 public class WebClientConfig {
+
+    // Shared RestTemplate bean — replaces ad-hoc `new RestTemplate()` calls (e.g. Google
+    // OAuth userinfo lookup) so callers are testable via @MockBean.
+    @Bean
+    public RestTemplate restTemplate() {
+        return new RestTemplate();
+    }
 
     @Value("${rapidapi.hotel.baseurl}")
     private String hotelBaseUrl;

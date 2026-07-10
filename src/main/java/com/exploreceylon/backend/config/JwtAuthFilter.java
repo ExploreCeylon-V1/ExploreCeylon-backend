@@ -31,9 +31,13 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             @NonNull FilterChain filterChain
     ) throws ServletException, IOException {
 
+        log.info("JWT Filter hit: {} {}", request.getMethod(), request.getRequestURI());
+
         final String authHeader = request.getHeader("Authorization");
         final String jwt;
         final String userEmail;
+
+        log.info("Auth header: {}", authHeader != null ? "Present" : "MISSING");
 
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
             filterChain.doFilter(request, response);
@@ -52,7 +56,9 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                 UserDetails userDetails =
                         userDetailsService.loadUserByUsername(userEmail);
 
-                if (jwtService.isTokenValid(jwt, userDetails)) {
+                // Re-checked per request (not just at login) so a deactivated account's
+                // still-unexpired access token stops working immediately.
+                if (jwtService.isTokenValid(jwt, userDetails) && userDetails.isEnabled()) {
                     UsernamePasswordAuthenticationToken authToken =
                             new UsernamePasswordAuthenticationToken(
                                     userDetails, null,

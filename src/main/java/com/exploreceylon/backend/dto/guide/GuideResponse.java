@@ -18,6 +18,7 @@ public class GuideResponse {
     private Double rating;
     private Integer reviewCount;
     private String phone;
+    private String whatsappNumber;
     private String email;
     private List<String> imageUrls;
 }

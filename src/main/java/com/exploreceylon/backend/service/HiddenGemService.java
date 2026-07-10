@@ -57,6 +57,16 @@ public class HiddenGemService {
                 .collect(Collectors.toList());
     }
 
+    // ── Nearby (distance-sorted, for AI trip planning) ─────
+    // Pushed to a SQL-level haversine ORDER BY (HiddenGemRepository
+    // .findNearestTo) instead of loading every approved row into Java.
+    public List<GemResponse> findNearby(double lat, double lng, int limit) {
+        return gemRepository.findNearestTo(lat, lng, limit)
+                .stream()
+                .map(this::toResponse)
+                .collect(Collectors.toList());
+    }
+
     // ── Get Gem By ID ──────────────────────────────────────
     public GemResponse getGemById(Long id) {
         HiddenGem gem = gemRepository.findById(id)
@@ -94,6 +104,11 @@ public class HiddenGemService {
                         ? req.getImageUrls() : List.of())
                 .submittedBy(user)
                 .approved(false) // pending admin approval
+                .seasonMonths(req.getSeasonMonths())
+                .travelStyleTags(req.getTravelStyleTags())
+                .budgetLevel(req.getBudgetLevel())
+                .entryFeeUsd(req.getEntryFeeUsd())
+                .visitDurationMinutes(req.getVisitDurationMinutes())
                 .build();
 
         return toResponse(gemRepository.save(gem));
@@ -116,6 +131,11 @@ public class HiddenGemService {
                 .imageUrls(req.getImageUrls() != null
                         ? req.getImageUrls() : List.of())
                 .approved(true) // admin adds → auto approved
+                .seasonMonths(req.getSeasonMonths())
+                .travelStyleTags(req.getTravelStyleTags())
+                .budgetLevel(req.getBudgetLevel())
+                .entryFeeUsd(req.getEntryFeeUsd())
+                .visitDurationMinutes(req.getVisitDurationMinutes())
                 .build();
 
         return toResponse(gemRepository.save(gem));
@@ -155,6 +175,11 @@ public class HiddenGemService {
         if (req.getBestTime()     != null) gem.setBestTime(req.getBestTime());
         if (req.getTips()         != null) gem.setTips(req.getTips());
         if (req.getImageUrls()    != null) gem.setImageUrls(req.getImageUrls());
+        if (req.getSeasonMonths() != null) gem.setSeasonMonths(req.getSeasonMonths());
+        if (req.getTravelStyleTags() != null) gem.setTravelStyleTags(req.getTravelStyleTags());
+        if (req.getBudgetLevel()  != null) gem.setBudgetLevel(req.getBudgetLevel());
+        if (req.getEntryFeeUsd()  != null) gem.setEntryFeeUsd(req.getEntryFeeUsd());
+        if (req.getVisitDurationMinutes() != null) gem.setVisitDurationMinutes(req.getVisitDurationMinutes());
 
         return toResponse(gemRepository.save(gem));
     }
@@ -183,6 +208,11 @@ public class HiddenGemService {
         res.setRating(g.getRating());
         res.setReviewCount(g.getReviewCount());
         res.setCreatedAt(g.getCreatedAt());
+        res.setSeasonMonths(g.getSeasonMonths());
+        res.setTravelStyleTags(g.getTravelStyleTags());
+        res.setBudgetLevel(g.getBudgetLevel());
+        res.setEntryFeeUsd(g.getEntryFeeUsd());
+        res.setVisitDurationMinutes(g.getVisitDurationMinutes());
         return res;
     }
 }

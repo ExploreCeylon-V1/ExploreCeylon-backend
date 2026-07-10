@@ -25,6 +25,7 @@ public class LocalVehicleResponse {
     private Boolean airportTransfer;
     private String driverName;
     private String driverPhone;
+    private String whatsappNumber;
     private String driverLanguages;
     private String description;
     private List<String> imageUrls;

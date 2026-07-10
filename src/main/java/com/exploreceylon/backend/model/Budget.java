@@ -8,7 +8,9 @@ import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @Entity
 @Table(name = "budgets")
@@ -41,6 +43,19 @@ public class Budget {
                orphanRemoval = true)
     @Builder.Default
     private List<BudgetItem> items = new ArrayList<>();
+
+    // Per-category spending allocations (e.g. HOTEL → 350.0). Optional:
+    // an empty map means the traveler hasn't split the budget by category.
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(
+        name = "budget_category_allocations",
+        joinColumns = @JoinColumn(name = "budget_id")
+    )
+    @MapKeyEnumerated(EnumType.STRING)
+    @MapKeyColumn(name = "category")
+    @Column(name = "amount")
+    @Builder.Default
+    private Map<BudgetItem.ItemCategory, Double> categoryBudgets = new HashMap<>();
 
     @Column(updatable = false)
     private LocalDateTime createdAt;

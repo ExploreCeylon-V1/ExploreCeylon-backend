@@ -79,6 +79,7 @@ public class AdminVehicleController {
         vehicle.setLongitude(request.getLongitude());
         vehicle.setDriverName(request.getDriverName());
         vehicle.setDriverPhone(request.getDriverPhone());
+        vehicle.setWhatsappNumber(request.getWhatsappNumber());
         vehicle.setDriverLanguages(request.getDriverLanguages());
         vehicle.setDriverIncluded(request.getDriverIncluded());
         vehicle.setAirportTransfer(request.getAirportTransfer());

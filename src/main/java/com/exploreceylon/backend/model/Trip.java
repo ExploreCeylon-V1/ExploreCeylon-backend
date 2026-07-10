@@ -27,8 +27,14 @@ public class Trip {
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
-    @Column(nullable = false)
+    @Column(name = "title", nullable = true, length = 200)
     private String title;
+
+    @Column(name = "from_location")
+    private String fromLocation;      // "Heading from"
+
+    @Column(name = "to_location")
+    private String toLocation;        // "Where to?"
 
     @Column(nullable = false)
     private LocalDate startDate;
@@ -44,6 +50,11 @@ public class Trip {
 
     @Builder.Default
     private Integer groupSize = 1;
+
+    // Optional numeric total-trip budget in LKR, set by the user. Nullable
+    // — used only to validate the generated itinerary's estimated cost
+    // and surface a warning note; never used to auto-swap destinations.
+    private Double budgetAmountLkr;
 
     @Enumerated(EnumType.STRING)
     @Builder.Default
@@ -87,7 +98,7 @@ public class Trip {
     // ── Enums ──────────────────────────────────────────────
     public enum TravelStyle {
         ADVENTURE, CULTURAL, RELAXATION,
-        FAMILY, HONEYMOON, PILGRIMAGE, WILDLIFE
+        FAMILY, HONEYMOON, PILGRIMAGE, WILDLIFE, PHOTOGRAPHY
     }
 
     public enum BudgetRange {
@@ -96,5 +107,10 @@ public class Trip {
 
     public enum TripStatus {
         DRAFT, CONFIRMED, COMPLETED, CANCELLED
+    }
+
+    public void setUserId(Long userId) {
+        // TODO Auto-generated method stub
+        throw new UnsupportedOperationException("Unimplemented method 'setUserId'");
     }
 }

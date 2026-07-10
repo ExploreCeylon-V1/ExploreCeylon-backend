@@ -17,6 +17,8 @@ public class GuideBookingResponse {
     private LocalDate endDate;
     private GuideBooking.BookingStatus status;
     private Double totalCost;
+    private Double advanceAmount;
+    private Double balanceAmount;
     private String notes;
     private LocalDateTime createdAt;
 }

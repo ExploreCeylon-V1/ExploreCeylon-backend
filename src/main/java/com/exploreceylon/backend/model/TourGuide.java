@@ -57,6 +57,8 @@ public class TourGuide {
     private Integer reviewCount = 0;
 
     private String phone;
+    // Raw WhatsApp number, no '+' or spaces, e.g. "94771234567"
+    private String whatsappNumber;
     private String email;
 
     @ElementCollection

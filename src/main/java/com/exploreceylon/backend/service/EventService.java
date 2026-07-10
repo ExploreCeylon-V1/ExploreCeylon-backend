@@ -96,12 +96,16 @@ public class EventService {
                 .category(req.getCategory())
                 .region(req.getRegion())
                 .location(req.getLocation())
+                .latitude(req.getLatitude())
+                .longitude(req.getLongitude())
                 .startDate(req.getStartDate())
                 .endDate(req.getEndDate())
                 .imageUrls(req.getImageUrls() != null 
                     ? req.getImageUrls() : List.of())
                 .isRecurring(req.getIsRecurring() != null
                         ? req.getIsRecurring() : true)
+                .travelStyleTags(req.getTravelStyleTags())
+                .estimatedCost(req.getEstimatedCost())
                 .build();
         return toResponse(eventRepository.save(event));
     }
@@ -116,9 +120,13 @@ public class EventService {
         if (req.getCategory()    != null) event.setCategory(req.getCategory());
         if (req.getRegion()      != null) event.setRegion(req.getRegion());
         if (req.getLocation()    != null) event.setLocation(req.getLocation());
+        if (req.getLatitude()    != null) event.setLatitude(req.getLatitude());
+        if (req.getLongitude()   != null) event.setLongitude(req.getLongitude());
         if (req.getStartDate()   != null) event.setStartDate(req.getStartDate());
         if (req.getEndDate()     != null) event.setEndDate(req.getEndDate());
         if (req.getImageUrls()    != null) event.setImageUrls(req.getImageUrls());
+        if (req.getTravelStyleTags() != null) event.setTravelStyleTags(req.getTravelStyleTags());
+        if (req.getEstimatedCost()   != null) event.setEstimatedCost(req.getEstimatedCost());
         return toResponse(eventRepository.save(event));
     }
 
@@ -137,11 +145,15 @@ public class EventService {
         res.setCategory(e.getCategory());
         res.setRegion(e.getRegion());
         res.setLocation(e.getLocation());
+        res.setLatitude(e.getLatitude());
+        res.setLongitude(e.getLongitude());
         res.setStartDate(e.getStartDate());
         res.setEndDate(e.getEndDate());
         res.setImageUrls(e.getImageUrls());
         res.setIsRecurring(e.getIsRecurring());
         res.setCreatedAt(e.getCreatedAt());
+        res.setTravelStyleTags(e.getTravelStyleTags());
+        res.setEstimatedCost(e.getEstimatedCost());
         return res;
     }
 }
