@@ -18,10 +18,31 @@ public interface VehicleBookingRepository
 
     @Query("SELECT COALESCE(SUM(b.totalCost), 0) FROM VehicleBooking b " +
            "WHERE CAST(b.status AS string) = :status")
-    Double sumRevenueByStatus(@Param("status") String status);   
+    Double sumRevenueByStatus(@Param("status") String status);
+
+    // Dashboard-wide totals — single aggregate query instead of loading
+    // every booking row to sum/count/filter in Java.
+    @Query("SELECT COALESCE(SUM(b.totalCost), 0) FROM VehicleBooking b")
+    double sumAllRevenue();
 
     // My bookings
     List<VehicleBooking> findByUserIdOrderByCreatedAtDesc(Long userId);
+
+    // Batch count for a page of users at once — see TripRepository.countByUserIdIn
+    @Query("SELECT b.user.id, COUNT(b) FROM VehicleBooking b WHERE b.user.id IN :userIds GROUP BY b.user.id")
+    List<Object[]> countByUserIdIn(@Param("userIds") List<Long> userIds);
+
+    // Bookings-by-month grouping, reused by Analytics.
+    @Query("SELECT FUNCTION('date_trunc', 'month', b.createdAt), COUNT(b) " +
+           "FROM VehicleBooking b GROUP BY FUNCTION('date_trunc', 'month', b.createdAt)")
+    List<Object[]> countGroupedByMonth();
+
+    // Most-booked vehicles, reused by the dashboard's Top Lists.
+    @Query("SELECT b.vehicle.id, COUNT(b) FROM VehicleBooking b GROUP BY b.vehicle.id ORDER BY COUNT(b) DESC")
+    List<Object[]> topVehiclesByBookingCount(org.springframework.data.domain.Pageable pageable);
+
+    // Deactivation gate — confirmed bookings with only the 20% advance paid (balance owed)
+    boolean existsByUserIdAndStatus(Long userId, VehicleBooking.BookingStatus status);
 
     // Trip bookings
     List<VehicleBooking> findByTripIdOrderByPickupDate(Long tripId);

@@ -153,6 +153,21 @@ public class TourGuideController {
         return ResponseEntity.ok(guideService.getGuideBookingsByGuideId(id));
     }
 
+    // PATCH /api/v1/guide-bookings/{id}/cancel
+    @PatchMapping("/api/v1/guide-bookings/{id}/cancel")
+    public ResponseEntity<GuideBookingResponse> cancelBooking(
+            @PathVariable Long id) {
+        return ResponseEntity.ok(guideService.cancelBooking(id));
+    }
+
+    // PATCH /api/v1/guide-bookings/{id}/status (Admin)
+    @PatchMapping("/api/v1/guide-bookings/{id}/status")
+    public ResponseEntity<GuideBookingResponse> updateBookingStatus(
+            @PathVariable Long id,
+            @RequestParam String status) {
+        return ResponseEntity.ok(guideService.updateBookingStatus(id, status));
+    }
+
     /* ─────────────────────────────────────────────────────────────────────
      * TEMPORARILY DISABLED — 2026-07-06
      * These admin guide-payout endpoints depended on the OLD GuidePayment model

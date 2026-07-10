@@ -258,6 +258,21 @@ public class LocalVehicleService {
                 .collect(Collectors.toList());
     }
 
+    // ── Admin — Delete Review ─────────────────────────────────────
+    public void deleteReview(Long reviewId) {
+        VehicleReview review = reviewRepository.findById(reviewId)
+                .orElseThrow(() -> new RuntimeException(
+                        "Review not found: " + reviewId));
+        Vehicle vehicle = review.getVehicle();
+        reviewRepository.delete(review);
+
+        Double avgRating = reviewRepository.findAverageRatingByVehicleId(vehicle.getId());
+        Long count = reviewRepository.countByVehicleId(vehicle.getId());
+        vehicle.setRating(avgRating != null ? Math.round(avgRating * 10.0) / 10.0 : 0.0);
+        vehicle.setReviewCount(count.intValue());
+        vehicleRepository.save(vehicle);
+    }
+
     private VehicleReviewResponse toReviewResponse(VehicleReview r, User user) {
         VehicleReviewResponse res = new VehicleReviewResponse();
         res.setId(r.getId());

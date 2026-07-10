@@ -116,16 +116,34 @@ public class VehicleBookingService {
                 .collect(Collectors.toList());
     }
 
+    // ── Ownership guard — owner or admin may access a booking ─────
+    private void assertOwnerOrAdmin(VehicleBooking booking, User user) {
+        boolean isOwner = booking.getUser().getId().equals(user.getId());
+        boolean isAdmin = user.getRole() == User.Role.ADMIN;
+        if (!isOwner && !isAdmin) {
+            throw new RuntimeException("Not authorized to access this booking");
+        }
+    }
+
     // ── Get Booking By ID ──────────────────────────────────
     public VehicleBookingResponse getBookingById(Long id) {
         VehicleBooking booking = bookingRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException(
                         "Booking not found: " + id));
+        assertOwnerOrAdmin(booking, getCurrentUser());
         return toResponse(booking);
     }
 
     // ── Get Trip Vehicle Bookings ──────────────────────────
     public List<VehicleBookingResponse> getTripBookings(Long tripId) {
+        User user = getCurrentUser();
+        Trip trip = tripRepository.findById(tripId)
+                .orElseThrow(() -> new RuntimeException(
+                        "Trip not found: " + tripId));
+        if (!trip.getUser().getId().equals(user.getId())
+                && user.getRole() != User.Role.ADMIN) {
+            throw new RuntimeException("Not authorized to access this trip");
+        }
         return bookingRepository
                 .findByTripIdOrderByPickupDate(tripId)
                 .stream()
@@ -138,12 +156,15 @@ public class VehicleBookingService {
         VehicleBooking booking = bookingRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException(
                         "Booking not found: " + id));
+        assertOwnerOrAdmin(booking, getCurrentUser());
         booking.setStatus(VehicleBooking.BookingStatus.CANCELLED);
         log.info("Vehicle booking cancelled: {}", id);
         return toResponse(bookingRepository.save(booking));
     }
 
     // ── Admin — Update Status ──────────────────────────────
+    // Endpoint is restricted to ROLE_ADMIN in SecurityConfig; no ownership
+    // check needed here since only admins may reach it.
     public VehicleBookingResponse updateStatus(
             Long id, String status) {
         VehicleBooking booking = bookingRepository.findById(id)

@@ -178,12 +178,20 @@ public class TripService {
                 .collect(Collectors.toList());
     }
 
+    // ── Ownership guard — every non-public trip operation must own the trip ──
+    private void assertOwner(Trip trip, User user) {
+        if (!trip.getUser().getId().equals(user.getId())) {
+            throw new RuntimeException("Not authorized to access this trip");
+        }
+    }
+
     // ── Get Trip By ID ─────────────────────────────────────
     @Transactional(readOnly = true)
     public TripResponse getTripById(Long id) {
         Trip trip = tripRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException(
                         "Trip not found: " + id));
+        assertOwner(trip, getCurrentUser());
         return toResponse(trip);
     }
 
@@ -202,6 +210,7 @@ public class TripService {
         TripDay day = tripDayRepository.findById(dayId)
                 .orElseThrow(() -> new RuntimeException(
                         "Day not found: " + dayId));
+        assertOwner(day.getTrip(), getCurrentUser());
         if (req.getRegion()           != null) day.setRegion(req.getRegion());
         if (req.getTheme()            != null) day.setTheme(req.getTheme());
         if (req.getTips()             != null) day.setTips(req.getTips());
@@ -216,6 +225,7 @@ public class TripService {
         TripDay day = tripDayRepository.findById(dayId)
                 .orElseThrow(() -> new RuntimeException(
                         "Day not found: " + dayId));
+        assertOwner(day.getTrip(), getCurrentUser());
 
         TripDayItem item = TripDayItem.builder()
                 .tripDay(day)
@@ -242,6 +252,7 @@ public class TripService {
         TripDayItem item = tripDayItemRepository.findById(itemId)
                 .orElseThrow(() -> new RuntimeException(
                         "Item not found: " + itemId));
+        assertOwner(item.getTripDay().getTrip(), getCurrentUser());
 
         TripDay day = item.getTripDay();
         day.setEstimatedDayCost(
@@ -256,12 +267,18 @@ public class TripService {
         Trip trip = tripRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException(
                         "Trip not found: " + id));
+        assertOwner(trip, getCurrentUser());
         trip.setStatus(TripStatus.valueOf(status.toUpperCase()));
         return toResponse(tripRepository.save(trip));
     }
 
     // ── Delete Trip ────────────────────────────────────────
     public void deleteTrip(Long id) {
+        Trip trip = tripRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException(
+                        "Trip not found: " + id));
+        assertOwner(trip, getCurrentUser());
+
         // Bookings are kept as historical records — detach them from the
         // trip instead of deleting, so the FK doesn't block trip deletion.
         vehicleBookingRepository.findByTripIdOrderByPickupDate(id)
@@ -290,6 +307,7 @@ public class TripService {
         Trip trip = tripRepository.findById(req.getTripId())
                 .orElseThrow(() -> new RuntimeException(
                         "Trip not found: " + req.getTripId()));
+        assertOwner(trip, getCurrentUser());
 
         List<String> regions   = req.getRegions()   != null
                 ? req.getRegions()   : List.of();

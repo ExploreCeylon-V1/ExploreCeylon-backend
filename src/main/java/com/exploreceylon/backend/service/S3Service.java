@@ -11,6 +11,7 @@ import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 
 import java.io.IOException;
+import java.util.Map;
 import java.util.UUID;
 
 @Service
@@ -28,9 +29,18 @@ public class S3Service {
 
     private static final long MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
 
-    private static final String[] ALLOWED_TYPES = {
-            "image/jpeg", "image/jpg", "image/png", "image/webp"
-    };
+    // Maps each accepted content-type to the extension actually written to
+    // S3 — the stored file's extension is always derived from this
+    // whitelist, never from the client-supplied original filename. That
+    // closes an extension-smuggling gap: without this, a file named
+    // "payload.php" sent with a spoofed "image/jpeg" content-type header
+    // would previously validate and be stored as "folder/uuid.php".
+    private static final Map<String, String> ALLOWED_TYPES = Map.of(
+            "image/jpeg", ".jpg",
+            "image/jpg", ".jpg",
+            "image/png", ".png",
+            "image/webp", ".webp"
+    );
 
     /**
      * folder = "destinations" | "gems" | "guides" | "vehicles" | "events" | "profiles"
@@ -87,27 +97,16 @@ public class S3Service {
             throw new IllegalArgumentException(
                     "File size exceeds 5MB limit");
         }
-
-        String contentType = file.getContentType();
-        boolean validType = false;
-        for (String type : ALLOWED_TYPES) {
-            if (type.equals(contentType)) {
-                validType = true;
-                break;
-            }
-        }
-        if (!validType) {
+        if (!ALLOWED_TYPES.containsKey(file.getContentType())) {
             throw new IllegalArgumentException(
                     "Only JPG, PNG, WEBP images allowed");
         }
     }
 
     private String generateFileName(MultipartFile file, String folder) {
-        String originalName = file.getOriginalFilename();
-        String extension = originalName != null && originalName.contains(".")
-                ? originalName.substring(originalName.lastIndexOf("."))
-                : ".jpg";
-
+        // Extension comes from the validated content-type map, not the
+        // client-supplied original filename — see the ALLOWED_TYPES comment.
+        String extension = ALLOWED_TYPES.get(file.getContentType());
         return folder + "/" + UUID.randomUUID() + extension;
     }
 

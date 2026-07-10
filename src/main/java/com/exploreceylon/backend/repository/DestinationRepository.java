@@ -48,6 +48,10 @@ public interface DestinationRepository
     // Get by name
     java.util.Optional<Destination> findByNameIgnoreCase(String name);
 
+    // Top-reviewed destinations — used by the admin dashboard's Top Lists
+    // card and by Analytics' destination-popularity chart.
+    List<Destination> findTop10ByOrderByReviewCountDesc();
+
     // ── Geo queries (SQL-level haversine, no full-table load) ──────────
     //
     // Standard haversine formula using Postgres' built-in trig functions
