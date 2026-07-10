@@ -15,4 +15,10 @@ public class UserResponse {
     private String phone;
     private LocalDateTime createdAt;
     private boolean active;
+    private boolean emailVerified;
+    private boolean phoneVerified;
+    private long tripCount;
+    private long vehicleBookingCount;
+    private long guideBookingCount;
+    private LocalDateTime lastLoginAt;
 }

@@ -40,6 +40,7 @@ public class GuidePayment {
     @Column(nullable = false)
     private Double guidePayout;          // 85% → guide
 
+    @Builder.Default
     private String currency = "USD";
 
     // ── PayHere gateway ───────────────────────────────────

@@ -1,10 +1,15 @@
 package com.exploreceylon.backend.controller;
 
+import com.exploreceylon.backend.model.GuideBooking;
 import com.exploreceylon.backend.model.RefreshToken;
 import com.exploreceylon.backend.model.User;
+import com.exploreceylon.backend.model.VehicleBooking;
 import com.exploreceylon.backend.model.VerificationCode.CodeType;
+import com.exploreceylon.backend.repository.GuideBookingRepository;
 import com.exploreceylon.backend.repository.UserRepository;
+import com.exploreceylon.backend.repository.VehicleBookingRepository;
 import com.exploreceylon.backend.service.RefreshTokenService;
+import com.exploreceylon.backend.service.S3Service;
 import com.exploreceylon.backend.service.VerificationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
@@ -14,7 +19,6 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.util.Base64;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -28,6 +32,9 @@ public class UserController {
     private final PasswordEncoder passwordEncoder;
     private final VerificationService verificationService;
     private final RefreshTokenService refreshTokenService;
+    private final S3Service s3Service;
+    private final VehicleBookingRepository vehicleBookingRepository;
+    private final GuideBookingRepository guideBookingRepository;
 
     // ── Shared user JSON (null-safe; not using Map.of due to null + 10-pair cap) ──
     private Map<String, Object> userJson(User u) {
@@ -74,12 +81,16 @@ public class UserController {
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
         try {
-            String contentType = file.getContentType() != null ? file.getContentType() : "image/jpeg";
-            String base64 = Base64.getEncoder().encodeToString(file.getBytes());
-            String dataUrl = "data:" + contentType + ";base64," + base64;
-            user.setProfilePhoto(dataUrl);
+            String oldPhoto = user.getProfilePhoto();
+            String url = s3Service.uploadFile(file, "profiles");
+            user.setProfilePhoto(url);
             userRepository.save(user);
-            return ResponseEntity.ok(Map.of("profilePhoto", dataUrl));
+            if (oldPhoto != null && !oldPhoto.isBlank() && oldPhoto.startsWith("http")) {
+                s3Service.deleteFile(oldPhoto);
+            }
+            return ResponseEntity.ok(Map.of("profilePhoto", url));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         } catch (Exception e) {
             return ResponseEntity.status(500).body(Map.of("error", "Failed to store profile photo"));
         }
@@ -93,8 +104,12 @@ public class UserController {
         User user = userRepository.findById(currentUser.getId())
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
+        String oldPhoto = user.getProfilePhoto();
         user.setProfilePhoto(null);
         userRepository.save(user);
+        if (oldPhoto != null && !oldPhoto.isBlank() && oldPhoto.startsWith("http")) {
+            s3Service.deleteFile(oldPhoto);
+        }
         return ResponseEntity.ok(Map.of("message", "Profile photo removed"));
     }
 
@@ -158,6 +173,19 @@ public class UserController {
     private ResponseEntity<?> deactivateAccount(User currentUser) {
         User user = userRepository.findById(currentUser.getId())
                 .orElseThrow(() -> new RuntimeException("User not found"));
+
+        // Block deactivation while a confirmed vehicle/guide booking still has
+        // only the 20% advance paid — the 80% balance must be settled first.
+        boolean hasUnsettledVehicle = vehicleBookingRepository
+                .existsByUserIdAndStatus(user.getId(), VehicleBooking.BookingStatus.CONFIRMED);
+        boolean hasUnsettledGuide = guideBookingRepository
+                .existsByUserIdAndStatus(user.getId(), GuideBooking.BookingStatus.CONFIRMED);
+        if (hasUnsettledVehicle || hasUnsettledGuide) {
+            return ResponseEntity.status(409).body(Map.of("error",
+                    "You have a confirmed vehicle or guide booking with an outstanding balance. " +
+                    "Please settle the remaining payment before deactivating your account."));
+        }
+
         user.setActive(false);
         userRepository.save(user);
         refreshTokenService.revokeAllForUser(user); // kill every active session too

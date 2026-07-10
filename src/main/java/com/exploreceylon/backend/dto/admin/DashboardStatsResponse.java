@@ -28,4 +28,18 @@ public class DashboardStatsResponse {
     private Double vehicleRevenue;
     private Double guideRevenue;
     private Double totalCommission;
+
+    // User health (Phase 2C)
+    private Long activeUsers;
+    private Long verifiedUsers;
+    private Long newUsersLast30Days;
+
+    // Content/engagement (Phase 2C)
+    private Long tripsCreated;
+    private Long totalReviews;
+    // Always 0 — the review schema has no moderation/"pending" flag on any
+    // of the 4 review tables (see Phase 1 audit). Kept in the response
+    // rather than omitted so the dashboard card has a real, honest value
+    // instead of silently disappearing if a future schema change adds one.
+    private Long pendingReviews;
 }

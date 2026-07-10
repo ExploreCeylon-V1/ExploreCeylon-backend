@@ -18,6 +18,29 @@ public interface GuideBookingRepository
     List<GuideBooking> findByGuideIdOrderByCreatedAtDesc(Long guideId);
     List<GuideBooking> findByTripIdOrderByStartDate(Long tripId);
 
+    long countByStatus(GuideBooking.BookingStatus status);
+
+    // Dashboard-wide totals — single aggregate query instead of loading
+    // every booking row to sum/count/filter in Java.
+    @Query("SELECT COALESCE(SUM(b.totalCost), 0) FROM GuideBooking b")
+    double sumAllRevenue();
+
+    // Batch count for a page of users at once — see TripRepository.countByUserIdIn
+    @Query("SELECT b.user.id, COUNT(b) FROM GuideBooking b WHERE b.user.id IN :userIds GROUP BY b.user.id")
+    List<Object[]> countByUserIdIn(@Param("userIds") List<Long> userIds);
+
+    // Bookings-by-month grouping, reused by Analytics.
+    @Query("SELECT FUNCTION('date_trunc', 'month', b.createdAt), COUNT(b) " +
+           "FROM GuideBooking b GROUP BY FUNCTION('date_trunc', 'month', b.createdAt)")
+    List<Object[]> countGroupedByMonth();
+
+    // Most-booked guides, reused by the dashboard's Top Lists.
+    @Query("SELECT b.guide.id, COUNT(b) FROM GuideBooking b GROUP BY b.guide.id ORDER BY COUNT(b) DESC")
+    List<Object[]> topGuidesByBookingCount(org.springframework.data.domain.Pageable pageable);
+
+    // Deactivation gate — confirmed bookings with only the 20% advance paid (balance owed)
+    boolean existsByUserIdAndStatus(Long userId, GuideBooking.BookingStatus status);
+
     // Availability — only active bookings (PENDING_PAYMENT/CONFIRMED) block dates
     @Query("SELECT COUNT(b) FROM GuideBooking b WHERE " +
            "b.guide.id = :guideId AND " +

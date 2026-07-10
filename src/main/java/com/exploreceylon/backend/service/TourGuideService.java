@@ -208,15 +208,41 @@ public class TourGuideService {
                 .collect(Collectors.toList());
     }
 
-    // ── Booking Detail (with ownership check) ──────────────
+    // ── Booking Detail (owner or admin) ────────────────────
     public GuideBookingResponse getBookingById(Long id) {
         User user = getCurrentUser();
         GuideBooking booking = bookingRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Booking not found: " + id));
-        if (!booking.getUser().getId().equals(user.getId())) {
+        boolean isOwner = booking.getUser().getId().equals(user.getId());
+        boolean isAdmin = user.getRole() == User.Role.ADMIN;
+        if (!isOwner && !isAdmin) {
             throw new RuntimeException("Not your booking");
         }
         return toBookingResponse(booking);
+    }
+
+    // ── Cancel Booking (owner or admin) ────────────────────
+    public GuideBookingResponse cancelBooking(Long id) {
+        User user = getCurrentUser();
+        GuideBooking booking = bookingRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Booking not found: " + id));
+        boolean isOwner = booking.getUser().getId().equals(user.getId());
+        boolean isAdmin = user.getRole() == User.Role.ADMIN;
+        if (!isOwner && !isAdmin) {
+            throw new RuntimeException("Not authorized to access this booking");
+        }
+        booking.setStatus(GuideBooking.BookingStatus.CANCELLED);
+        log.info("Guide booking cancelled: {}", id);
+        return toBookingResponse(bookingRepository.save(booking));
+    }
+
+    // ── Admin — Update Booking Status ──────────────────────
+    // Endpoint is restricted to ROLE_ADMIN in SecurityConfig.
+    public GuideBookingResponse updateBookingStatus(Long id, String status) {
+        GuideBooking booking = bookingRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Booking not found: " + id));
+        booking.setStatus(GuideBooking.BookingStatus.valueOf(status.toUpperCase()));
+        return toBookingResponse(bookingRepository.save(booking));
     }
 
     // ── Check Availability ─────────────────────────────────
@@ -277,6 +303,21 @@ public class TourGuideService {
                 .stream()
                 .map(r -> toReviewResponse(r, r.getUser()))
                 .collect(Collectors.toList());
+    }
+
+    // ── Admin — Delete Review ──────────────────────────────
+    public void deleteReview(Long reviewId) {
+        GuideReview review = reviewRepository.findById(reviewId)
+                .orElseThrow(() -> new RuntimeException(
+                        "Review not found: " + reviewId));
+        TourGuide guide = review.getGuide();
+        reviewRepository.delete(review);
+
+        Double avgRating = reviewRepository.findAverageRatingByGuideId(guide.getId());
+        Long count = reviewRepository.countByGuideId(guide.getId());
+        guide.setRating(avgRating != null ? Math.round(avgRating * 10.0) / 10.0 : 0.0);
+        guide.setReviewCount(count.intValue());
+        guideRepository.save(guide);
     }
 
     // ── Helper ─────────────────────────────────────────────
