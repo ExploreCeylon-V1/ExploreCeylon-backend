@@ -40,6 +40,7 @@ public class VehiclePayment {
     @Column(nullable = false)
     private Double driverPayout;         // 85% → driver
 
+    @Builder.Default
     private String currency = "USD";
 
     // ── PayHere gateway ───────────────────────────────────
