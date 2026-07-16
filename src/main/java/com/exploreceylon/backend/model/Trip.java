@@ -109,8 +109,4 @@ public class Trip {
         DRAFT, CONFIRMED, COMPLETED, CANCELLED
     }
 
-    public void setUserId(Long userId) {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'setUserId'");
-    }
 }
