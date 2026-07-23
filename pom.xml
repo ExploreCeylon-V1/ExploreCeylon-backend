@@ -40,6 +40,12 @@
 			<artifactId>spring-boot-starter-web</artifactId>
 		</dependency>
 
+		<!-- WebSocket (live chat, STOMP over SockJS) -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-websocket</artifactId>
+		</dependency>
+
 		<!-- Gmail SMTP (JavaMailSender) -->
 		<dependency>
 			<groupId>org.springframework.boot</groupId>

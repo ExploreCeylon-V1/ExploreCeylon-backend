@@ -18,6 +18,7 @@ public interface UserRepository extends JpaRepository<User, Long>, JpaSpecificat
     long countByActiveTrue();
     long countByEmailVerifiedTrue();
     long countByCreatedAtAfter(LocalDateTime cutoff);
+    long countByRole(User.Role role);
 
     // Recent registrations for the admin dashboard's Recent Activity card.
     List<User> findTop5ByOrderByCreatedAtDesc();

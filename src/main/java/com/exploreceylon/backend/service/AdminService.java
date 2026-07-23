@@ -11,6 +11,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
@@ -38,8 +39,20 @@ public class AdminService {
     private final AdminBookingQueryRepository adminBookingQueryRepository;
     private final AdminReviewQueryRepository adminReviewQueryRepository;
     private final AdminReviewService        adminReviewService;
+    private final PasswordEncoder           passwordEncoder;
 
     private static final double COMMISSION_RATE = 0.15;
+
+    // Re-confirms it's really the acting admin (not just a still-open browser tab)
+    // before role changes or activate/deactivate — the password checked here is the
+    // ACTING admin's own, never the target user's.
+    private void verifyAdminPassword(User admin, String rawPassword) {
+        if (admin.getPassword() == null
+                || rawPassword == null || rawPassword.isBlank()
+                || !passwordEncoder.matches(rawPassword, admin.getPassword())) {
+            throw new RuntimeException("Incorrect password");
+        }
+    }
 
     // ── Dashboard Stats ────────────────────────────────────
     // Every figure below is a COUNT/SUM aggregate query — the old version
@@ -422,38 +435,50 @@ public class AdminService {
     }
 
     // ── Activate User ───────────────────────────────────────
-    public void activateUser(Long id) {
+    public void activateUser(Long id, User admin, String password) {
+        verifyAdminPassword(admin, password);
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("User not found: " + id));
         user.setActive(true);
         userRepository.save(user);
-        log.info("User activated: {}", user.getEmail());
+        log.info("User activated: {} (by {})", user.getEmail(), admin.getEmail());
     }
 
     // ── Deactivate User ────────────────────────────────────
-    public void deactivateUser(Long id) {
+    public void deactivateUser(Long id, User admin, String password) {
+        verifyAdminPassword(admin, password);
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException(
                         "User not found: " + id));
         user.setActive(false);
         userRepository.save(user);
-        log.info("User deactivated: {}", user.getEmail());
+        log.info("User deactivated: {} (by {})", user.getEmail(), admin.getEmail());
     }
 
     // ── Bulk Activate/Deactivate ────────────────────────────
     // One findAllById + one saveAll instead of N single-user round trips.
-    public int bulkSetUserActive(List<Long> ids, boolean active) {
+    public int bulkSetUserActive(List<Long> ids, boolean active, User admin, String password) {
+        verifyAdminPassword(admin, password);
         List<User> users = userRepository.findAllById(ids);
         users.forEach(u -> u.setActive(active));
         userRepository.saveAll(users);
-        log.info("Bulk {} {} users", active ? "activated" : "deactivated", users.size());
+        log.info("Bulk {} {} users (by {})", active ? "activated" : "deactivated", users.size(), admin.getEmail());
         return users.size();
     }
 
     // ── Change Role ──────────────────────────────────────────
-    public UserResponse changeUserRole(Long id, User.Role role) {
+    public UserResponse changeUserRole(Long id, User.Role role, User admin, String password) {
+        verifyAdminPassword(admin, password);
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("User not found: " + id));
+
+        // Refuse to demote the last remaining admin — that would lock everyone out of
+        // the admin panel with no way back in short of a direct DB edit.
+        if (user.getRole() == User.Role.ADMIN && role != User.Role.ADMIN
+                && userRepository.countByRole(User.Role.ADMIN) <= 1) {
+            throw new RuntimeException("Cannot remove the last remaining admin");
+        }
+
         user.setRole(role);
         userRepository.save(user);
         log.info("User role changed: {} -> {}", user.getEmail(), role);
