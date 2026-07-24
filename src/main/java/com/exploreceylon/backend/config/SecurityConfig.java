@@ -38,6 +38,12 @@ public class SecurityConfig {
                 .requestMatchers("/api/v1/auth/**").permitAll()
                 .requestMatchers("/api/v1/hotels/**").permitAll()
 
+                // Live chat: WS handshake auth is done separately (ChatHandshakeInterceptor);
+                // REST is traveler-authenticated / admin-gated like everything else.
+                .requestMatchers("/ws-chat/**").permitAll()
+                .requestMatchers("/api/v1/chat/admin/**").hasRole("ADMIN")
+                .requestMatchers("/api/v1/chat/**").authenticated()
+
                 // Local vehicles (public browse; mutations admin-only via AdminVehicleController)
                 .requestMatchers(HttpMethod.POST, "/api/v1/vehicles/local/*/reviews").authenticated()
                 .requestMatchers(HttpMethod.PUT, "/api/v1/vehicles/local/*/availability").hasRole("ADMIN")
@@ -113,6 +119,7 @@ public class SecurityConfig {
         configuration.setAllowCredentials(true);
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/api/**", configuration);
+        source.registerCorsConfiguration("/ws-chat/**", configuration); // SockJS XHR-fallback handshake
         return source;
     }
 

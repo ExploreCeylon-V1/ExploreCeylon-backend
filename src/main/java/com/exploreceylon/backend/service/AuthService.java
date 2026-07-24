@@ -46,20 +46,14 @@ public class AuthService {
             throw new RuntimeException("Email already registered: " + request.getEmail());
         }
 
-        User.Role role = User.Role.TRAVELER;
-        if (request.getRole() != null) {
-            try {
-                role = User.Role.valueOf(request.getRole().toUpperCase());
-            } catch (Exception e) {
-                log.warn("Invalid role: {}, defaulting to TRAVELER", request.getRole());
-            }
-        }
-
+        // Public self-registration always creates a TRAVELER — never trust a client-supplied
+        // role here. Admin accounts are only created by an existing admin promoting a user
+        // via PUT /api/v1/admin/users/{id}/role (AdminController), which is hasRole("ADMIN")-gated.
         User user = User.builder()
                 .name(request.getName())
                 .email(request.getEmail())
                 .password(passwordEncoder.encode(request.getPassword()))
-                .role(role)
+                .role(User.Role.TRAVELER)
                 .authProvider(User.AuthProvider.LOCAL)
                 .nationality(request.getNationality())
                 .language(request.getLanguage() != null ? request.getLanguage() : "en")

@@ -22,5 +22,6 @@ public class RegisterRequest {
     private String nationality;
     private String language;
     private String phone;
-    private String role; // TRAVELER, GUIDE, OPERATOR
+    // No role field: public registration always creates a TRAVELER (see AuthService.register).
+    // Admin accounts are granted only by an existing admin via PUT /api/v1/admin/users/{id}/role.
 }
