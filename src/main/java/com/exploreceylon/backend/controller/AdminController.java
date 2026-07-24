@@ -7,6 +7,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
@@ -95,30 +96,39 @@ public class AdminController {
 
     // PUT /api/v1/admin/users/{id}/activate
     @PutMapping("/users/{id}/activate")
-    public ResponseEntity<?> activateUser(@PathVariable Long id) {
-        adminService.activateUser(id);
+    public ResponseEntity<?> activateUser(
+            @PathVariable Long id,
+            @AuthenticationPrincipal User admin,
+            @Valid @RequestBody AdminPasswordConfirmRequest request) {
+        adminService.activateUser(id, admin, request.getPassword());
         return ResponseEntity.ok().build();
     }
 
     // PUT /api/v1/admin/users/{id}/deactivate
     @PutMapping("/users/{id}/deactivate")
     public ResponseEntity<?> deactivateUser(
-            @PathVariable Long id) {
-        adminService.deactivateUser(id);
+            @PathVariable Long id,
+            @AuthenticationPrincipal User admin,
+            @Valid @RequestBody AdminPasswordConfirmRequest request) {
+        adminService.deactivateUser(id, admin, request.getPassword());
         return ResponseEntity.ok().build();
     }
 
     // POST /api/v1/admin/users/bulk-activate
     @PostMapping("/users/bulk-activate")
-    public ResponseEntity<?> bulkActivateUsers(@Valid @RequestBody BulkIdsRequest request) {
-        int count = adminService.bulkSetUserActive(request.getIds(), true);
+    public ResponseEntity<?> bulkActivateUsers(
+            @AuthenticationPrincipal User admin,
+            @Valid @RequestBody BulkIdsRequest request) {
+        int count = adminService.bulkSetUserActive(request.getIds(), true, admin, request.getPassword());
         return ResponseEntity.ok(java.util.Map.of("updated", count));
     }
 
     // POST /api/v1/admin/users/bulk-deactivate
     @PostMapping("/users/bulk-deactivate")
-    public ResponseEntity<?> bulkDeactivateUsers(@Valid @RequestBody BulkIdsRequest request) {
-        int count = adminService.bulkSetUserActive(request.getIds(), false);
+    public ResponseEntity<?> bulkDeactivateUsers(
+            @AuthenticationPrincipal User admin,
+            @Valid @RequestBody BulkIdsRequest request) {
+        int count = adminService.bulkSetUserActive(request.getIds(), false, admin, request.getPassword());
         return ResponseEntity.ok(java.util.Map.of("updated", count));
     }
 
@@ -126,8 +136,9 @@ public class AdminController {
     @PutMapping("/users/{id}/role")
     public ResponseEntity<UserResponse> changeUserRole(
             @PathVariable Long id,
+            @AuthenticationPrincipal User admin,
             @Valid @RequestBody ChangeRoleRequest request) {
-        return ResponseEntity.ok(adminService.changeUserRole(id, request.getRole()));
+        return ResponseEntity.ok(adminService.changeUserRole(id, request.getRole(), admin, request.getPassword()));
     }
 
     // PUT /api/v1/admin/users/{id}/reset-verification?type=EMAIL|PHONE|BOTH

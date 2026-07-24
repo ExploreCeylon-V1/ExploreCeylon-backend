@@ -158,21 +158,34 @@ public class UserController {
         return ResponseEntity.ok(userJson(user));
     }
 
-    // POST /api/v1/users/me/deactivate  — soft-delete (blocks future logins via isEnabled())
+    // POST /api/v1/users/me/deactivate  { password }  — soft-delete (blocks future logins via isEnabled())
     @PostMapping("/me/deactivate")
-    public ResponseEntity<?> deactivate(@AuthenticationPrincipal User currentUser) {
-        return deactivateAccount(currentUser);
+    public ResponseEntity<?> deactivate(
+            @AuthenticationPrincipal User currentUser,
+            @RequestBody(required = false) Map<String, String> body) {
+        return deactivateAccount(currentUser, body != null ? body.get("password") : null);
     }
 
-    // DELETE /api/v1/users/account  — same soft-delete, REST-style alias
+    // DELETE /api/v1/users/account  { password }  — same soft-delete, REST-style alias
     @DeleteMapping("/account")
-    public ResponseEntity<?> deleteAccount(@AuthenticationPrincipal User currentUser) {
-        return deactivateAccount(currentUser);
+    public ResponseEntity<?> deleteAccount(
+            @AuthenticationPrincipal User currentUser,
+            @RequestBody(required = false) Map<String, String> body) {
+        return deactivateAccount(currentUser, body != null ? body.get("password") : null);
     }
 
-    private ResponseEntity<?> deactivateAccount(User currentUser) {
+    private ResponseEntity<?> deactivateAccount(User currentUser, String password) {
         User user = userRepository.findById(currentUser.getId())
                 .orElseThrow(() -> new RuntimeException("User not found"));
+
+        // Google-only users with no password set can't confirm with one — same exemption
+        // as /auth/change-password. Everyone else must re-enter their real password.
+        if (user.getPassword() != null) {
+            if (password == null || password.isBlank()
+                    || !passwordEncoder.matches(password, user.getPassword())) {
+                return ResponseEntity.badRequest().body(Map.of("error", "Incorrect password"));
+            }
+        }
 
         // Block deactivation while a confirmed vehicle/guide booking still has
         // only the 20% advance paid — the 80% balance must be settled first.
