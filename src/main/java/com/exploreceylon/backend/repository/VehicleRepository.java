@@ -23,9 +23,6 @@ public interface VehicleRepository extends JpaRepository<Vehicle, Long> {
     List<Vehicle> findByDistrictIgnoreCaseAndTypeAndAvailableTrue(
             String district, Vehicle.VehicleType type);
 
-    // Airport transfers
-    List<Vehicle> findByAirportTransferTrueAndAvailableTrue();
-
     // Driver included
     List<Vehicle> findByDriverIncludedTrueAndAvailableTrue();
 
