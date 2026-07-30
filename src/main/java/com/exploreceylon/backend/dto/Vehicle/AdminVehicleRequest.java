@@ -26,7 +26,6 @@ public class AdminVehicleRequest {
     private String whatsappNumber;
     private String driverLanguages;
     private Boolean driverIncluded;
-    private Boolean airportTransfer;
     private Boolean available;
     private String description;
     private List<String> imageUrls;

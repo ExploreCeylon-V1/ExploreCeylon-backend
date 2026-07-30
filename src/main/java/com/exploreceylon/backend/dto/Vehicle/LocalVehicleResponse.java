@@ -22,7 +22,6 @@ public class LocalVehicleResponse {
     private String district;
     private String pickupLocation;
     private Boolean driverIncluded;
-    private Boolean airportTransfer;
     private String driverName;
     private String driverPhone;
     private String whatsappNumber;

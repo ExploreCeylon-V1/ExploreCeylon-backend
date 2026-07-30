@@ -47,7 +47,6 @@ public class Vehicle {
     private String driverLanguages;
 
     private Boolean driverIncluded = false;
-    private Boolean airportTransfer = false;
     private Boolean available = true;
 
     @Column(length = 1000)

@@ -68,13 +68,6 @@ public class LocalVehicleService {
             vehicles = vehicleRepository.findAll();
         }
 
-        // Filter airport transfer
-        if (Boolean.TRUE.equals(request.getAirportTransfer())) {
-            vehicles = vehicles.stream()
-                    .filter(v -> Boolean.TRUE.equals(v.getAirportTransfer()))
-                    .collect(Collectors.toList());
-        }
-
         // Filter driver included
         if (Boolean.TRUE.equals(request.getDriverIncluded())) {
             vehicles = vehicles.stream()
@@ -120,20 +113,6 @@ public class LocalVehicleService {
     public List<LocalVehicleResponse> getTukTuks(LocalDate startDate, LocalDate endDate) {
         List<Vehicle> vehicles = filterByAvailability(
                 vehicleRepository.findByTypeAndAvailableTrue(Vehicle.VehicleType.TUKTUK),
-                startDate, endDate);
-        return vehicles.stream()
-                .map(this::toResponse)
-                .collect(Collectors.toList());
-    }
-
-    // ── Get Airport Transfers ──────────────────────────────────
-    public List<LocalVehicleResponse> getAirportTransfers() {
-        return getAirportTransfers(null, null);
-    }
-
-    public List<LocalVehicleResponse> getAirportTransfers(LocalDate startDate, LocalDate endDate) {
-        List<Vehicle> vehicles = filterByAvailability(
-                vehicleRepository.findByAirportTransferTrueAndAvailableTrue(),
                 startDate, endDate);
         return vehicles.stream()
                 .map(this::toResponse)
@@ -190,7 +169,6 @@ public class LocalVehicleService {
         existingVehicle.setWhatsappNumber(updatedVehicle.getWhatsappNumber());
         existingVehicle.setDriverLanguages(updatedVehicle.getDriverLanguages());
         existingVehicle.setDriverIncluded(updatedVehicle.getDriverIncluded());
-        existingVehicle.setAirportTransfer(updatedVehicle.getAirportTransfer());
         existingVehicle.setAvailable(updatedVehicle.getAvailable());
         existingVehicle.setDescription(updatedVehicle.getDescription());
         existingVehicle.setImageUrls(updatedVehicle.getImageUrls());
@@ -305,7 +283,6 @@ public class LocalVehicleService {
         res.setDistrict(v.getDistrict());
         res.setPickupLocation(v.getPickupLocation());
         res.setDriverIncluded(v.getDriverIncluded());
-        res.setAirportTransfer(v.getAirportTransfer());
         res.setDriverName(v.getDriverName());
         res.setDriverPhone(v.getDriverPhone());
         res.setWhatsappNumber(v.getWhatsappNumber());
