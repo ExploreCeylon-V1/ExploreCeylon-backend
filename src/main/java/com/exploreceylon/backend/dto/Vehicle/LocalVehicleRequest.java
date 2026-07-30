@@ -11,7 +11,6 @@ public class LocalVehicleRequest {
     private Double minPrice;
     private Double maxPrice;
     private Boolean driverIncluded;
-    private Boolean airportTransfer;
 
     // When both given, excludes vehicles with an active booking overlapping the range.
     private LocalDate startDate;

@@ -57,15 +57,6 @@ public class LocalVehicleController {
         return ResponseEntity.ok(localVehicleService.getTukTuks(startDate, endDate));
     }
 
-    // GET /api/v1/vehicles/local/airport-transfers
-    @GetMapping("/airport-transfers")
-    public ResponseEntity<List<LocalVehicleResponse>> getAirportTransfers(
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
-        return ResponseEntity.ok(
-                localVehicleService.getAirportTransfers(startDate, endDate));
-    }
-
     // GET /api/v1/vehicles/local/{id}/check-availability?startDate&endDate → {available}
     @GetMapping("/{id}/check-availability")
     public ResponseEntity<Map<String, Boolean>> checkAvailability(
