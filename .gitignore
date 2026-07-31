@@ -34,3 +34,6 @@ build/
 
 # Sensitive properties files
 application-dev.properties
+
+# Environment files
+.env
