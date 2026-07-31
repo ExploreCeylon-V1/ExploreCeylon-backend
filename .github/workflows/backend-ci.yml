@@ -12,21 +12,6 @@ jobs:
     name: Build & Test
     runs-on: ubuntu-latest
 
-    services:
-      postgres:
-        image: postgres:15
-        env:
-          POSTGRES_DB: explore_ceylon_db
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: root
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -39,11 +24,11 @@ jobs:
           cache: maven
 
       - name: Build with Maven
-        env:
-          SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/explore_ceylon_db
-          SPRING_DATASOURCE_USERNAME: postgres
-          SPRING_DATASOURCE_PASSWORD: root
-          JWT_SECRET: TestSecretKeyForCICD2025VeryLongKey
+        # Tests run under @ActiveProfiles("test") (H2, see application-test.properties).
+        # No SPRING_DATASOURCE_* env vars here on purpose — Spring Boot's env-var
+        # binding takes precedence over profile properties files, so setting a
+        # Postgres URL here previously broke the H2 test profile (driver stayed
+        # H2, url got overridden to Postgres -> Hibernate couldn't detect a dialect).
         run: ./mvnw clean verify -B
 
       - name: Upload JAR
