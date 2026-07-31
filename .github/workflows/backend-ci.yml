@@ -43,7 +43,6 @@ jobs:
           SPRING_DATASOURCE_USERNAME: postgres
           SPRING_DATASOURCE_PASSWORD: root
           JWT_SECRET: TestSecretKeyForCICD2025VeryLongKey
-          RAPIDAPI_KEY: 4b3a795869msh1e97b134f485cc0p197e38jsn9f3575479b4c
         run: ./mvnw clean verify -B
 
       - name: Upload JAR
