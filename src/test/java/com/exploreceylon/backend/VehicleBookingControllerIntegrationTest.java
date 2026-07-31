@@ -7,6 +7,7 @@ import com.exploreceylon.backend.repository.VehicleBookingRepository;
 import com.exploreceylon.backend.repository.VehicleRepository;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -58,6 +59,16 @@ class VehicleBookingControllerIntegrationTest {
         vehicle.setDistrict("Colombo");
         vehicle.setAvailable(true);
         vehicleId = vehicles.save(vehicle).getId();
+    }
+
+    @AfterEach
+    void tearDown() {
+        // The H2 instance is shared/cached across test classes in this suite run
+        // (DB_CLOSE_ON_EXIT=FALSE) -- clean up after the last test here too, or
+        // leftover vehicle_bookings rows FK-block unrelated classes' users.deleteAll().
+        bookings.deleteAll();
+        vehicles.deleteAll();
+        users.deleteAll();
     }
 
     private String registerAndLogin(String email) throws Exception {

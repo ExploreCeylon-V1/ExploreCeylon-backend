@@ -23,6 +23,12 @@ public class Vehicle {
 
     private String brand;
     private String model;
+
+    // Quoted column name: YEAR is a reserved word in H2 (breaks the test
+    // profile's schema creation), though not on Postgres. Quoting resolves
+    // to the same physical column there too, since Postgres already folds
+    // unquoted identifiers to lowercase.
+    @Column(name = "\"year\"")
     private Integer year;
     private Integer seats;
     private String color;
