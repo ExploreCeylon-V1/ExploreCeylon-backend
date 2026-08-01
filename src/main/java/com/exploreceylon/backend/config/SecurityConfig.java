@@ -37,6 +37,10 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                 .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**").permitAll()
                 .requestMatchers("/api/v1/auth/**").permitAll()
+
+                // Maintenance mode: public read (checked before login), admin-only write
+                // (covered by the "/api/v1/admin/**" -> hasRole("ADMIN") rule below).
+                .requestMatchers(HttpMethod.GET, "/api/v1/maintenance/status").permitAll()
                 .requestMatchers("/api/v1/hotels/**").permitAll()
 
                 // Live chat: WS handshake auth is done separately (ChatHandshakeInterceptor);
