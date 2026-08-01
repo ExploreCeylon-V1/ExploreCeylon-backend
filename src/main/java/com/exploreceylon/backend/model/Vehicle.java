@@ -23,6 +23,12 @@ public class Vehicle {
 
     private String brand;
     private String model;
+
+    // Quoted column name: YEAR is a reserved word in H2 (breaks the test
+    // profile's schema creation), though not on Postgres. Quoting resolves
+    // to the same physical column there too, since Postgres already folds
+    // unquoted identifiers to lowercase.
+    @Column(name = "\"year\"")
     private Integer year;
     private Integer seats;
     private String color;
@@ -42,10 +48,11 @@ public class Vehicle {
 
     private String driverName;
     private String driverPhone;
+    // Raw WhatsApp number, no '+' or spaces, e.g. "94771234567"
+    private String whatsappNumber;
     private String driverLanguages;
 
     private Boolean driverIncluded = false;
-    private Boolean airportTransfer = false;
     private Boolean available = true;
 
     @Column(length = 1000)

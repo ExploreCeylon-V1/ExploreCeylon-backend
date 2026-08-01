@@ -23,8 +23,13 @@ public class DestinationResponse {
     private String entryFee;
     private String openingHours;
     private Boolean featured;
+    private Boolean active;
     private Double rating;
     private Integer reviewCount;
     private String unescoStatus;
     private String nearbyGems;
+    private Double entryFeeUsd;
+    private Integer visitDurationMinutes;
+    private com.exploreceylon.backend.model.BudgetLevel budgetLevel;
+    private String travelStyleTags;
 }

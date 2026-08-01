@@ -1,4 +1,4 @@
-package com.exploreceylon.backend.dto.Vehicle;
+package com.exploreceylon.backend.dto.vehicle;
 
 import lombok.Data;
 import java.util.List;
@@ -11,15 +11,20 @@ public class LocalVehicleResponse {
     private String category;
     private String brand;
     private String model;
+    private Integer year;
+    private String color;
+    private String licensePlate;
+    private Double latitude;
+    private Double longitude;
     private Integer seats;
     private Double pricePerDay;
     private String currency;
     private String district;
     private String pickupLocation;
     private Boolean driverIncluded;
-    private Boolean airportTransfer;
     private String driverName;
     private String driverPhone;
+    private String whatsappNumber;
     private String driverLanguages;
     private String description;
     private List<String> imageUrls;

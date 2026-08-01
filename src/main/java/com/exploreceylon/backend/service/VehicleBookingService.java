@@ -1,7 +1,7 @@
 package com.exploreceylon.backend.service;
 
-import com.exploreceylon.backend.dto.Vehicle.BookVehicleRequest;
-import com.exploreceylon.backend.dto.Vehicle.VehicleBookingResponse;
+import com.exploreceylon.backend.dto.vehicle.BookVehicleRequest;
+import com.exploreceylon.backend.dto.vehicle.VehicleBookingResponse;
 import com.exploreceylon.backend.model.*;
 import com.exploreceylon.backend.repository.*;
 import lombok.RequiredArgsConstructor;
@@ -24,6 +24,7 @@ public class VehicleBookingService {
     private final VehicleRepository        vehicleRepository;
     private final UserRepository           userRepository;
     private final TripRepository           tripRepository;
+    private final BudgetService            budgetService;
 
     // ── Current User ───────────────────────────────────────
     private User getCurrentUser() {
@@ -58,6 +59,8 @@ public class VehicleBookingService {
         long days = ChronoUnit.DAYS.between(
                 req.getPickupDate(), req.getDropoffDate()) + 1;
         double totalCost = vehicle.getPricePerDay() * days;
+        double advanceAmount = Math.round(totalCost * 0.20 * 100.0) / 100.0;
+        double balanceAmount = Math.round((totalCost - advanceAmount) * 100.0) / 100.0;
 
         // Get trip if provided
         Trip trip = null;
@@ -79,13 +82,27 @@ public class VehicleBookingService {
                         ? req.getDropoffLocation()
                         : req.getPickupLocation())
                 .totalCost(totalCost)
+                .advanceAmount(advanceAmount)
+                .balanceAmount(balanceAmount)
                 .notes(req.getNotes())
-                .status(VehicleBooking.BookingStatus.CONFIRMED)
+                .status(VehicleBooking.BookingStatus.PENDING_PAYMENT)
                 .build();
 
         VehicleBooking saved = bookingRepository.save(booking);
         log.info("Vehicle booked: {} by {} — {} days — ${}",
                 vehicle.getName(), user.getEmail(), days, totalCost);
+
+        // Feed the trip's budget tracker (no-op if the trip has no budget)
+        if (trip != null) {
+            budgetService.autoAddFromBooking(
+                    trip.getId(),
+                    BudgetItem.ItemCategory.VEHICLE,
+                    vehicle.getName() + " (" + days
+                            + (days == 1 ? " day)" : " days)"),
+                    totalCost,
+                    "VB-" + saved.getId(),
+                    req.getPickupDate());
+        }
         return toResponse(saved);
     }
 
@@ -99,16 +116,34 @@ public class VehicleBookingService {
                 .collect(Collectors.toList());
     }
 
+    // ── Ownership guard — owner or admin may access a booking ─────
+    private void assertOwnerOrAdmin(VehicleBooking booking, User user) {
+        boolean isOwner = booking.getUser().getId().equals(user.getId());
+        boolean isAdmin = user.getRole() == User.Role.ADMIN;
+        if (!isOwner && !isAdmin) {
+            throw new RuntimeException("Not authorized to access this booking");
+        }
+    }
+
     // ── Get Booking By ID ──────────────────────────────────
     public VehicleBookingResponse getBookingById(Long id) {
         VehicleBooking booking = bookingRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException(
                         "Booking not found: " + id));
+        assertOwnerOrAdmin(booking, getCurrentUser());
         return toResponse(booking);
     }
 
     // ── Get Trip Vehicle Bookings ──────────────────────────
     public List<VehicleBookingResponse> getTripBookings(Long tripId) {
+        User user = getCurrentUser();
+        Trip trip = tripRepository.findById(tripId)
+                .orElseThrow(() -> new RuntimeException(
+                        "Trip not found: " + tripId));
+        if (!trip.getUser().getId().equals(user.getId())
+                && user.getRole() != User.Role.ADMIN) {
+            throw new RuntimeException("Not authorized to access this trip");
+        }
         return bookingRepository
                 .findByTripIdOrderByPickupDate(tripId)
                 .stream()
@@ -121,12 +156,15 @@ public class VehicleBookingService {
         VehicleBooking booking = bookingRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException(
                         "Booking not found: " + id));
+        assertOwnerOrAdmin(booking, getCurrentUser());
         booking.setStatus(VehicleBooking.BookingStatus.CANCELLED);
         log.info("Vehicle booking cancelled: {}", id);
         return toResponse(bookingRepository.save(booking));
     }
 
     // ── Admin — Update Status ──────────────────────────────
+    // Endpoint is restricted to ROLE_ADMIN in SecurityConfig; no ownership
+    // check needed here since only admins may reach it.
     public VehicleBookingResponse updateStatus(
             Long id, String status) {
         VehicleBooking booking = bookingRepository.findById(id)
@@ -166,6 +204,8 @@ public class VehicleBookingService {
         res.setDropoffLocation(b.getDropoffLocation());
         res.setStatus(b.getStatus());
         res.setTotalCost(b.getTotalCost());
+        res.setAdvanceAmount(b.getAdvanceAmount());
+        res.setBalanceAmount(b.getBalanceAmount());
         res.setNotes(b.getNotes());
         res.setCreatedAt(b.getCreatedAt());
         return res;

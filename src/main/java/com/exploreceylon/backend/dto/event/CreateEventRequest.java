@@ -6,6 +6,7 @@ import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 
 import java.time.LocalDate;
+import java.util.List;
 
 @Data
 public class CreateEventRequest {
@@ -21,12 +22,20 @@ public class CreateEventRequest {
     @NotBlank(message = "Region is required")
     private String region;
 
+    @NotBlank(message = "Location is required")
+    private String location;
+
+    private Double latitude;
+    private Double longitude;
+
     @NotNull(message = "Start date is required")
     private LocalDate startDate;
 
     @NotNull(message = "End date is required")
     private LocalDate endDate;
 
-    private String imageUrl;
+    private List<String> imageUrls;
     private Boolean isRecurring;
+    private String travelStyleTags;
+    private Double estimatedCost;
 }

@@ -1,4 +1,4 @@
-package com.exploreceylon.backend.dto.Vehicle;
+package com.exploreceylon.backend.dto.vehicle;
 
 import com.exploreceylon.backend.model.VehicleBooking;
 import lombok.Data;
@@ -22,6 +22,8 @@ public class VehicleBookingResponse {
     private String dropoffLocation;
     private VehicleBooking.BookingStatus status;
     private Double totalCost;
+    private Double advanceAmount;
+    private Double balanceAmount;
     private String notes;
     private LocalDateTime createdAt;
 }

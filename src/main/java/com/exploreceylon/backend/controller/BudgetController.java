@@ -53,6 +53,26 @@ public class BudgetController {
                         budgetId, totalBudget, currency));
     }
 
+    // PUT /api/v1/budget/{budgetId}/categories
+    // Body: {"HOTEL": 350.0, "FOOD": 70.0, ...}
+    @PutMapping("/{budgetId}/categories")
+    public ResponseEntity<BudgetResponse> updateCategoryBudgets(
+            @PathVariable Long budgetId,
+            @RequestBody java.util.Map<String, Double> allocations) {
+        return ResponseEntity.ok(
+                budgetService.updateCategoryBudgets(budgetId, allocations));
+    }
+
+    // POST /api/v1/budget/{budgetId}/repair-dates
+    // One-time fix for auto-added items whose date predates the fix that
+    // made autoAddFromBooking use the booking's real date.
+    @PostMapping("/{budgetId}/repair-dates")
+    public ResponseEntity<BudgetResponse> repairAutoAddedDates(
+            @PathVariable Long budgetId) {
+        return ResponseEntity.ok(
+                budgetService.repairAutoAddedDates(budgetId));
+    }
+
     // POST /api/v1/budget/{budgetId}/items
     @PostMapping("/{budgetId}/items")
     public ResponseEntity<BudgetItemResponse> addItem(

@@ -49,10 +49,14 @@ public class VehicleBooking {
 
     @Enumerated(EnumType.STRING)
     @Builder.Default
-    private BookingStatus status = BookingStatus.CONFIRMED;
+    private BookingStatus status = BookingStatus.PENDING_PAYMENT;
 
     @Column(nullable = false)
     private Double totalCost;
+
+    // 20% advance / 80% balance — persisted at creation (single source of truth)
+    private Double advanceAmount;
+    private Double balanceAmount;
 
     @Column(length = 500)
     private String notes;
@@ -66,6 +70,9 @@ public class VehicleBooking {
     }
 
     public enum BookingStatus {
-        PENDING, CONFIRMED, COMPLETED, CANCELLED
+        PENDING_PAYMENT, // booking created, awaiting 20% advance
+        CONFIRMED,       // 20% advance paid via PayHere
+        COMPLETED,       // 80% balance paid via PayHere — fully settled
+        CANCELLED        // booking cancelled / expired
     }
 }

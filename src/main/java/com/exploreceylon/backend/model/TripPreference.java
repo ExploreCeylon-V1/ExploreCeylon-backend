@@ -18,6 +18,12 @@ public class TripPreference {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Column(name = "to_location")
+    private String toLocation;
+
+    @Column(name = "from_location")
+    private String fromLocation;
+
     @OneToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "trip_id", nullable = false, unique = true)
     private Trip trip;

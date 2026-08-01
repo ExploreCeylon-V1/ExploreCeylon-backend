@@ -1,7 +1,7 @@
 package com.exploreceylon.backend.controller;
 
-import com.exploreceylon.backend.dto.Vehicle.BookVehicleRequest;
-import com.exploreceylon.backend.dto.Vehicle.VehicleBookingResponse;
+import com.exploreceylon.backend.dto.vehicle.BookVehicleRequest;
+import com.exploreceylon.backend.dto.vehicle.VehicleBookingResponse;
 import com.exploreceylon.backend.service.VehicleBookingService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;

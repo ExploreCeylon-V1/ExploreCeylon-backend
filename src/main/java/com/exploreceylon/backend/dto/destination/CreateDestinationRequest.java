@@ -34,6 +34,11 @@ public class CreateDestinationRequest {
     private String entryFee;
     private String openingHours;
     private Boolean featured;
+    private Boolean active;
     private String unescoStatus;
     private String nearbyGems;
+    private Double entryFeeUsd;
+    private Integer visitDurationMinutes;
+    private com.exploreceylon.backend.model.BudgetLevel budgetLevel;
+    private String travelStyleTags;
 }

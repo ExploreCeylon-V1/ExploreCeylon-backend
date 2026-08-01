@@ -16,11 +16,12 @@ public class RegisterRequest {
     private String email;
 
     @NotBlank(message = "Password is required")
-    @Size(min = 6, message = "Password must be at least 6 characters")
+    @Size(min = 8, message = "Password must be at least 8 characters")
     private String password;
 
     private String nationality;
     private String language;
     private String phone;
-    private String role; // TRAVELER, GUIDE, OPERATOR
+    // No role field: public registration always creates a TRAVELER (see AuthService.register).
+    // Admin accounts are granted only by an existing admin via PUT /api/v1/admin/users/{id}/role.
 }

@@ -8,6 +8,8 @@ import lombok.NoArgsConstructor;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 @Entity
 @Table(name = "events")
@@ -35,15 +37,36 @@ public class Event {
     private String region;
 
     @Column(nullable = false)
+    private String location;
+
+    private Double latitude;
+    private Double longitude;
+
+    @Column(nullable = false)
     private LocalDate startDate;
 
     @Column(nullable = false)
     private LocalDate endDate;
 
-    private String imageUrl;
+    @ElementCollection
+    @CollectionTable(
+        name = "event_images",
+        joinColumns = @JoinColumn(name = "event_id")
+    )
+    @Column(name = "image_url")
+    @Builder.Default
+    private List<String> imageUrls = new ArrayList<>();
 
     @Builder.Default
     private Boolean isRecurring = true;
+
+    // Comma separated travel-style tags, same convention as
+    // Destination.travelStyleTags. Nullable — NULL means "fits any style".
+    private String travelStyleTags;
+
+    // Estimated per-person cost in USD to attend, nullable — folded into
+    // the real per-day budget estimate alongside entryFeeUsd.
+    private Double estimatedCost;
 
     @Column(updatable = false)
     private LocalDateTime createdAt;
@@ -56,6 +79,6 @@ public class Event {
     // ── Enum ───────────────────────────────────────────────
     public enum EventCategory {
         FESTIVAL, RELIGIOUS, WILDLIFE,
-        SURF, FOOD, ENTERTAINMENT, MONSOON
+        SURF, FOOD, ENTERTAINMENT, MONSOON,
     }
 }
