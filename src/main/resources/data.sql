@@ -752,33 +752,40 @@ UPDATE events SET latitude = 6.6828, longitude = 80.3992
 WHERE title = 'Ratnapura Gem and Rainforest Week'
   AND latitude IS NULL;
 
-INSERT INTO users (name, email, password, role, nationality, created_at, updated_at)
+-- auth_provider is NOT NULL with no DB-level default (User.authProvider's
+-- @Builder.Default only applies when Hibernate builds the object in Java;
+-- it has no effect on this raw SQL insert), so it must be listed explicitly.
+INSERT INTO users (name, email, password, role, auth_provider, nationality, created_at, updated_at)
 SELECT * FROM (VALUES
     ('Admin User',
      'admin@exploreceylon.com',
      '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2uheWG/igi.',
      'ADMIN',
+     'LOCAL',
      'Sri Lankan',
      NOW(), NOW()),
     ('Kamal Perera',
      'nimal@gmail.com',
      '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2uheWG/igi.',
      'TRAVELER',
+     'LOCAL',
      'Sri Lankan',
      NOW(), NOW()),
     ('supun Perera',
      'supun@gmail.com',
      '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2uheWG/igi.',
      'TRAVELER',
+     'LOCAL',
      'Sri Lankan',
      NOW(), NOW()),
     ('sadun Perera',
      'sadun@gmail.com',
      '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2uheWG/igi.',
      'TRAVELER',
+     'LOCAL',
      'India',
      NOW(), NOW())
-) AS new_data (name, email, password, role, nationality, created_at, updated_at)
+) AS new_data (name, email, password, role, auth_provider, nationality, created_at, updated_at)
 WHERE NOT EXISTS (SELECT 1 FROM users LIMIT 1);
 
 -- ─────────────────────────────────────────────────────────────
