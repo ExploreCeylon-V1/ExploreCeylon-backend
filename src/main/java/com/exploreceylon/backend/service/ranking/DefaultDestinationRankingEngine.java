@@ -54,8 +54,7 @@ public class DefaultDestinationRankingEngine implements DestinationRankingEngine
 
     // Default constructor for unit tests / fallback
     public DefaultDestinationRankingEngine() {
-        this.distanceCalculator = (lat1, lng1, lat2, lng2) ->
-                com.exploreceylon.backend.util.GeoUtils.distanceKm(lat1, lng1, lat2, lng2);
+        this.distanceCalculator = new com.exploreceylon.backend.util.HaversineDistanceCalculator();
     }
 
     @Override

@@ -382,7 +382,8 @@ public class ItineraryAssemblyService {
             }
 
             int dur = visitMinutes(bestCandidate);
-            int travel = (int) Math.round(bestDist / AVG_ROAD_SPEED_KMH * 60);
+            com.exploreceylon.backend.dto.routing.DistanceResult routeResult = distanceCalculator.calculateRoute(curLat, curLng, bestCandidate.getLatitude(), bestCandidate.getLongitude());
+            int travel = routeResult != null ? routeResult.getDrivingDurationMinutes() : (int) Math.round(bestDist / AVG_ROAD_SPEED_KMH * 60);
 
             boolean wouldOverflow = !currentBin.isEmpty()
                     && (sightseeingMin + dur > MAX_SIGHTSEEING_MINUTES_PER_DAY

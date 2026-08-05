@@ -115,15 +115,17 @@ FROM (
 ) sub
 WHERE d.id = sub.destination_id AND (d.review_count IS NULL OR d.review_count = 0);
 
--- Backfill default realistic ratings/reviews for any remaining destinations without reviews
+-- Backfill realistic diverse ratings and review counts for destinations without reviews
 UPDATE destinations
-SET rating = 4.7, review_count = 142
+SET review_count = 50 + (id * 17) % 350,
+    rating = ROUND((4.1 + ((id * 7) % 9) * 0.1)::numeric, 1)
 WHERE (review_count IS NULL OR review_count = 0) AND (rating IS NULL OR rating = 0.0);
 
 -- ─────────────────────────────────────────────────────────────
 -- 5. Hidden Gems Realistic Ratings & Reviews (Lower count, higher rating)
 -- ─────────────────────────────────────────────────────────────
 UPDATE hidden_gems
-SET rating = 4.8, review_count = 18
+SET review_count = 8 + (id * 3) % 25,
+    rating = ROUND((4.5 + ((id * 5) % 5) * 0.1)::numeric, 1)
 WHERE (review_count IS NULL OR review_count = 0) AND (rating IS NULL OR rating = 0.0);
 
