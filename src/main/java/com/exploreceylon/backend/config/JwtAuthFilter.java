@@ -1,5 +1,7 @@
 package com.exploreceylon.backend.config;
 
+import io.jsonwebtoken.ExpiredJwtException;
+import io.jsonwebtoken.JwtException;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -72,8 +74,12 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                             .setAuthentication(authToken);
                 }
             }
+        } catch (ExpiredJwtException e) {
+            log.warn("JWT expired for request {}: {}", request.getRequestURI(), e.getMessage());
+        } catch (JwtException e) {
+            log.warn("Invalid JWT for request {}: {}", request.getRequestURI(), e.getMessage());
         } catch (Exception e) {
-            log.error("JWT error: {}", e.getMessage());
+            log.error("Unexpected JWT validation error for request {}: {}", request.getRequestURI(), e.getMessage());
         }
 
         filterChain.doFilter(request, response);
