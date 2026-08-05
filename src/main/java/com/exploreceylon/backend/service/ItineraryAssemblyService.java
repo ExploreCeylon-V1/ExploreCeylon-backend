@@ -9,6 +9,7 @@ import com.exploreceylon.backend.repository.EventRepository;
 import com.exploreceylon.backend.repository.HiddenGemRepository;
 import com.exploreceylon.backend.service.ranking.DestinationRankingEngine;
 import com.exploreceylon.backend.service.ranking.RankingContext;
+import com.exploreceylon.backend.util.DistanceCalculator;
 import com.exploreceylon.backend.util.GeoUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -44,6 +45,7 @@ public class ItineraryAssemblyService {
     private final EventRepository       eventRepository;
     private final com.exploreceylon.backend.repository.LocationRepository locationRepository;
     private final DestinationRankingEngine destinationRankingEngine;
+    private final DistanceCalculator distanceCalculator;
 
     // ── Corridor detour tuning ──────────────────────────────
     // maxDetourKm = BASE_DETOUR_KM + tripDurationDays * PER_DAY_DETOUR_ALLOWANCE_KM

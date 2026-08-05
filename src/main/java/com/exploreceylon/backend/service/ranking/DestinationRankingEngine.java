@@ -27,4 +27,14 @@ public interface DestinationRankingEngine {
      * @return List of destinations sorted by priority score (descending).
      */
     List<Destination> rankDestinations(List<Destination> candidates, RankingContext context);
+
+    /**
+     * Produces a detailed internal explanation object showing individual score component values.
+     * For internal logging and debugging purposes only.
+     *
+     * @param destination The candidate destination entity to evaluate.
+     * @param context     The current trip ranking context.
+     * @return Internal DestinationScore explanation object.
+     */
+    DestinationScore explainScore(Destination destination, RankingContext context);
 }

@@ -92,6 +92,44 @@ class DestinationRankingEngineTest {
     }
 
     @Test
+    @DisplayName("Should produce detailed DestinationScore breakdown with component values")
+    void testExplainScore() {
+        Destination unescoDest = Destination.builder()
+                .id(10L)
+                .name("Galle Fort")
+                .category(Destination.DestinationCategory.HERITAGE)
+                .travelStyleTags("CULTURAL,HERITAGE")
+                .bestMonths("january,february,march")
+                .rating(4.8)
+                .reviewCount(300)
+                .featured(true)
+                .unescoStatus("World Heritage Site")
+                .latitude(6.0535)
+                .longitude(80.2210)
+                .build();
+
+        RankingContext context = RankingContext.builder()
+                .currentPosition(new GeoPoint(6.0535, 80.2210))
+                .travelStyles(List.of("CULTURAL"))
+                .tripMonths(Set.of("january"))
+                .build();
+
+        DestinationScore explanation = rankingEngine.explainScore(unescoDest, context);
+
+        assertNotNull(explanation);
+        assertEquals(10L, explanation.getDestinationId());
+        assertEquals("Galle Fort", explanation.getDestinationName());
+        assertTrue(explanation.getFinalScore() > 80.0);
+        assertTrue(explanation.getRatingScore() > 20.0);
+        assertTrue(explanation.getPopularityScore() > 10.0);
+        assertTrue(explanation.getStyleScore() > 20.0);
+        assertTrue(explanation.getSeasonScore() > 5.0);
+        assertTrue(explanation.getBonusScore() == 10.0);
+        assertTrue(explanation.isSeasonMatch());
+        assertTrue(explanation.getMatchingStyles().contains("CULTURAL"));
+    }
+
+    @Test
     @DisplayName("Should handle null destination and context gracefully without throwing exception")
     void testNullHandling() {
         assertDoesNotThrow(() -> {
