@@ -48,6 +48,8 @@ public class ItineraryAssemblyService {
     private final DistanceCalculator distanceCalculator;
     private final com.exploreceylon.backend.service.corridor.TravelCorridorEngine travelCorridorEngine;
     private final com.exploreceylon.backend.service.progression.JourneyProgressionEngine journeyProgressionEngine;
+    private final com.exploreceylon.backend.service.budget.DayBudgetEngine dayBudgetEngine;
+    private final com.exploreceylon.backend.service.selection.DestinationSelectionEngine destinationSelectionEngine;
 
     // ── Corridor detour tuning ──────────────────────────────
     // maxDetourKm = BASE_DETOUR_KM + tripDurationDays * PER_DAY_DETOUR_ALLOWANCE_KM
@@ -221,6 +223,9 @@ public class ItineraryAssemblyService {
 
     /** Candidate pool: corridor + budget/style/season filtered destinations and gems. */
     public record CandidatePool(List<Destination> destinations, List<HiddenGem> gems) {}
+
+    /** Trip day containing assigned destinations, hidden gems, and events. */
+    public record TripDay(int dayNumber, List<Destination> destinations, List<HiddenGem> gems, List<Event> events) {}
 
     public CandidatePool buildCandidatePool(
             GeoPoint origin, GeoPoint destination, int tripDurationDays,
