@@ -379,6 +379,13 @@ public class ItineraryAssemblyService {
             GeoPoint origin, GeoPoint destination, LocalDate startDate,
             int tripDurationDays, int groupSize, BudgetLevel budgetLevel,
             List<String> travelStyles) {
+        return assemble(origin, destination, startDate, tripDurationDays, groupSize, budgetLevel, travelStyles, null);
+    }
+
+    public List<PlannedDay> assemble(
+            GeoPoint origin, GeoPoint destination, LocalDate startDate,
+            int tripDurationDays, int groupSize, BudgetLevel budgetLevel,
+            List<String> travelStyles, String specialNotes) {
 
         CandidatePool pool = buildCandidatePool(
                 origin, destination, tripDurationDays, budgetLevel, travelStyles,
@@ -455,6 +462,26 @@ public class ItineraryAssemblyService {
                         .build();
 
                 double rankScore = destinationRankingEngine.calculateScore(d, stepContext);
+
+                // User Edit / Special Notes Keyword Boosting
+                double promptBonus = 0.0;
+                if (specialNotes != null && !specialNotes.isBlank()) {
+                    String notesLower = specialNotes.toLowerCase(Locale.ROOT);
+                    String nameLower = d.getName() != null ? d.getName().toLowerCase(Locale.ROOT) : "";
+                    String districtLower = d.getDistrict() != null ? d.getDistrict().toLowerCase(Locale.ROOT) : "";
+
+                    boolean isRemove = notesLower.contains("remove") || notesLower.contains("delete") || notesLower.contains("exclude");
+                    for (String word : notesLower.split("[^a-zA-Z0-9]+")) {
+                        if (word.length() >= 4 && (nameLower.contains(word) || districtLower.contains(word))) {
+                            if (isRemove) {
+                                promptBonus -= 500.0;
+                            } else {
+                                promptBonus += 300.0;
+                            }
+                        }
+                    }
+                }
+                rankScore += promptBonus;
 
                 // Forward corridor progression scoring
                 double candidateProgressKm = journeyProgressionEngine.calculateProgress(d, progContext).getProgressDistanceKm();

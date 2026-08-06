@@ -74,15 +74,9 @@ public class DefaultPlannerFacadeService implements PlannerFacadeService {
 
         // 1. Core Itinerary Assembly Pipeline
         long phase1Start = System.currentTimeMillis();
-        List<PlannedDay> initialDays = itineraryAssemblyService.assemble(
-                originPoint,
-                destPoint,
-                startDate,
-                durationDays,
-                request.getGroupSize(),
-                budgetLevel,
-                styles
-        );
+        List<PlannedDay> initialDays = request.getSpecialNotes() != null && !request.getSpecialNotes().isBlank()
+                ? itineraryAssemblyService.assemble(originPoint, destPoint, startDate, durationDays, request.getGroupSize(), budgetLevel, styles, request.getSpecialNotes())
+                : itineraryAssemblyService.assemble(originPoint, destPoint, startDate, durationDays, request.getGroupSize(), budgetLevel, styles);
         long phase1Time = System.currentTimeMillis() - phase1Start;
         log.info("[PERFORMANCE] Phase 1: Core Itinerary Assembly completed in {} ms", phase1Time);
 
