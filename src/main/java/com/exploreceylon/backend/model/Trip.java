@@ -106,7 +106,6 @@ public class Trip {
     }
 
     public enum TripStatus {
-        DRAFT, CONFIRMED, COMPLETED, CANCELLED
+        DRAFT, CONFIRMED, COMPLETED, CANCELLED, PLANNING, GENERATED, ACTIVE, ARCHIVED
     }
-
 }
