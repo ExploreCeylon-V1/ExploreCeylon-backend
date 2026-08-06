@@ -18,7 +18,7 @@ class DestinationRankingEngineTest {
 
     @BeforeEach
     void setUp() {
-        rankingEngine = new DefaultDestinationRankingEngine();
+        rankingEngine = new DefaultDestinationRankingEngine(new com.exploreceylon.backend.util.HaversineDistanceCalculator());
     }
 
     @Test

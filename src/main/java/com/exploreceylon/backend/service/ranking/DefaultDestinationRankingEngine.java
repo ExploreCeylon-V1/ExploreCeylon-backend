@@ -52,11 +52,6 @@ public class DefaultDestinationRankingEngine implements DestinationRankingEngine
         this.distanceCalculator = distanceCalculator;
     }
 
-    // Default constructor for unit tests / fallback
-    public DefaultDestinationRankingEngine() {
-        this.distanceCalculator = new com.exploreceylon.backend.util.HaversineDistanceCalculator();
-    }
-
     @Override
     public double calculateScore(Destination destination, RankingContext context) {
         return explainScore(destination, context).getFinalScore();

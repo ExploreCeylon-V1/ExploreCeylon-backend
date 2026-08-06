@@ -46,6 +46,7 @@ public class ItineraryAssemblyService {
     private final com.exploreceylon.backend.repository.LocationRepository locationRepository;
     private final DestinationRankingEngine destinationRankingEngine;
     private final DistanceCalculator distanceCalculator;
+    private final com.exploreceylon.backend.service.corridor.TravelCorridorEngine travelCorridorEngine;
 
     // ── Corridor detour tuning ──────────────────────────────
     // maxDetourKm = BASE_DETOUR_KM + tripDurationDays * PER_DAY_DETOUR_ALLOWANCE_KM
@@ -263,7 +264,21 @@ public class ItineraryAssemblyService {
                 .budgetLevel(budgetLevel)
                 .build();
 
-        List<Destination> rankedDest = destinationRankingEngine.rankDestinations(filteredDest, poolContext);
+        com.exploreceylon.backend.dto.routing.DistanceResult routeResult = distanceCalculator.calculateRoute(origin.lat(), origin.lng(), destination.lat(), destination.lng());
+        String polyline = routeResult != null ? routeResult.getEncodedPolyline() : null;
+
+        List<Destination> corridorDest = travelCorridorEngine.filterCandidates(
+                filteredDest,
+                com.exploreceylon.backend.service.corridor.CorridorContext.builder()
+                        .origin(origin)
+                        .destination(destination)
+                        .encodedPolyline(polyline)
+                        .maxDetourKm(maxDetour)
+                        .corridorEnabled(true)
+                        .build()
+        );
+
+        List<Destination> rankedDest = destinationRankingEngine.rankDestinations(corridorDest, poolContext);
 
         List<HiddenGem> filteredGems = gemCandidates.stream()
                 .filter(g -> detourKm(origin, destination, g.getLatitude(), g.getLongitude()) <= maxDetour)

@@ -50,9 +50,13 @@ public class OsrmClient {
      * Note: OSRM expects coordinates in {longitude},{latitude} format.
      */
     public DistanceResult getRoute(double lat1, double lng1, double lat2, double lng2) {
-        // OSRM URL format: /route/v1/driving/{lng1},{lat1};{lng2},{lat2}?overview=false
+        return getRoute(lat1, lng1, lat2, lng2, false);
+    }
+
+    public DistanceResult getRoute(double lat1, double lng1, double lat2, double lng2, boolean includeOverview) {
+        String overviewParam = includeOverview ? "overview=simplified" : "overview=false";
         String coordsStr = String.format(Locale.ROOT, "%.6f,%.6f;%.6f,%.6f", lng1, lat1, lng2, lat2);
-        String url = String.format(Locale.ROOT, "%s/route/v1/%s/%s?overview=false", baseUrl, profile, coordsStr);
+        String url = String.format(Locale.ROOT, "%s/route/v1/%s/%s?%s", baseUrl, profile, coordsStr, overviewParam);
 
         try {
             log.debug("Executing OSRM route query: {}", url);
