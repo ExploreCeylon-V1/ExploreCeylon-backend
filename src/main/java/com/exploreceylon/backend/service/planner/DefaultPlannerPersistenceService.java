@@ -129,6 +129,12 @@ public class DefaultPlannerPersistenceService implements PlannerPersistenceServi
     public PlannerResponse getGeneratedTripById(Long tripId, User authenticatedUser) {
         Trip trip = findTripAndVerifyOwner(tripId, authenticatedUser);
 
+        if (trip.getDays() != null && !trip.getDays().isEmpty()) {
+            PlannerMetadata metadata = plannerMetadataRepository.findByTrip(trip).orElse(null);
+            PlannerCostSnapshot costSnapshot = plannerCostSnapshotRepository.findByTrip(trip).orElse(null);
+            return plannerTripMapper.mapEntityToResponse(trip, metadata, costSnapshot);
+        }
+
         PlannerRequest request = PlannerRequest.builder()
                 .origin(trip.getFromLocation())
                 .destination(trip.getToLocation())

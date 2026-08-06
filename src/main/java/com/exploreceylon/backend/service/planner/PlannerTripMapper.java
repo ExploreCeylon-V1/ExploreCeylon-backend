@@ -130,6 +130,104 @@ public class PlannerTripMapper {
                 .build();
     }
 
+    public PlannerResponse mapEntityToResponse(Trip trip, PlannerMetadata metadata, PlannerCostSnapshot costSnapshot) {
+        if (trip == null) return null;
+
+        java.util.List<PlannedDay> plannedDays = new java.util.ArrayList<>();
+        if (trip.getDays() != null) {
+            for (TripDay td : trip.getDays()) {
+                java.util.List<PlannedStop> stops = new java.util.ArrayList<>();
+                if (td.getItems() != null) {
+                    for (TripDayItem tdi : td.getItems()) {
+                        com.exploreceylon.backend.service.ItineraryAssemblyService.StopType stopType = tdi.getType() == TripDayItem.ItemType.GEM
+                                ? com.exploreceylon.backend.service.ItineraryAssemblyService.StopType.GEM
+                                : com.exploreceylon.backend.service.ItineraryAssemblyService.StopType.DESTINATION;
+
+                        Long refId = null;
+                        if (tdi.getReferenceId() != null) {
+                            try {
+                                refId = Long.parseLong(tdi.getReferenceId());
+                            } catch (NumberFormatException ignored) {}
+                        }
+
+                        stops.add(new PlannedStop(
+                                stopType,
+                                refId,
+                                tdi.getTitle() != null ? tdi.getTitle() : "Attraction",
+                                td.getRegion() != null ? td.getRegion() : "Sri Lanka",
+                                0.0, 0.0, 60,
+                                tdi.getCost() != null ? tdi.getCost() : 0.0,
+                                "MORNING"
+                        ));
+                    }
+                }
+
+                plannedDays.add(new PlannedDay(
+                        td.getDayNumber() != null ? td.getDayNumber() : 1,
+                        td.getDate() != null ? td.getDate() : trip.getStartDate(),
+                        td.getRegion() != null ? td.getRegion() : "Sri Lanka",
+                        stops,
+                        td.getEstimatedDayCost() != null ? td.getEstimatedDayCost() : 0.0
+                ));
+            }
+        }
+
+        int tripDays = (int) (trip.getEndDate().toEpochDay() - trip.getStartDate().toEpochDay() + 1);
+
+        com.exploreceylon.backend.dto.planner.PlannerSummary summary = com.exploreceylon.backend.dto.planner.PlannerSummary.builder()
+                .origin(trip.getFromLocation())
+                .destination(trip.getToLocation())
+                .tripDays(tripDays)
+                .travelStyle(trip.getTravelStyle() != null ? trip.getTravelStyle().name() : "RELAXED")
+                .budget(trip.getBudgetRange() != null ? trip.getBudgetRange().name() : "MID_RANGE")
+                .groupSize(trip.getGroupSize() != null ? trip.getGroupSize() : 1)
+                .overallScore(metadata != null && metadata.getQualityScore() != null ? metadata.getQualityScore() : 95.0)
+                .build();
+
+        com.exploreceylon.backend.dto.cost.TripCostEstimate costEstimate;
+        if (costSnapshot != null) {
+            costEstimate = com.exploreceylon.backend.dto.cost.TripCostEstimate.builder()
+                    .grandTotal(costSnapshot.getGrandTotal())
+                    .build();
+        } else {
+            costEstimate = com.exploreceylon.backend.dto.cost.TripCostEstimate.builder()
+                    .grandTotal(trip.getBudgetAmountLkr() != null ? trip.getBudgetAmountLkr() : 0.0)
+                    .build();
+        }
+
+        com.exploreceylon.backend.dto.planner.PlannerStatistics statistics = com.exploreceylon.backend.dto.planner.PlannerStatistics.builder()
+                .totalPipelineExecutionTimeMs(metadata != null && metadata.getExecutionTimeMs() != null ? metadata.getExecutionTimeMs() : 100L)
+                .totalDestinationsEvaluated(countStopsInList(plannedDays))
+                .totalStopsScheduled(countStopsInList(plannedDays))
+                .routeMatrixReusePercentage(100.0)
+                .build();
+
+        com.exploreceylon.backend.dto.narrative.NarrativeResponse narrative = com.exploreceylon.backend.dto.narrative.NarrativeResponse.builder()
+                .overview("Your saved journey from " + trip.getFromLocation() + " to " + trip.getToLocation())
+                .build();
+
+        return PlannerResponse.builder()
+                .tripId(trip.getId())
+                .createdAt(trip.getCreatedAt())
+                .owner(trip.getUser() != null ? trip.getUser().getEmail() : null)
+                .status(trip.getStatus())
+                .summary(summary)
+                .days(plannedDays)
+                .destinations(java.util.List.of(trip.getToLocation() != null ? trip.getToLocation() : "Sri Lanka"))
+                .gems(java.util.List.of())
+                .events(java.util.List.of())
+                .narrative(narrative)
+                .estimatedCost(costEstimate)
+                .statistics(statistics)
+                .qualityScore(summary.getOverallScore())
+                .build();
+    }
+
+    private int countStopsInList(java.util.List<PlannedDay> days) {
+        if (days == null) return 0;
+        return days.stream().mapToInt(d -> d.stops() != null ? d.stops().size() : 0).sum();
+    }
+
     private TravelStyle parseTravelStyle(String style) {
         if (style == null) return TravelStyle.RELAXATION;
         try {
