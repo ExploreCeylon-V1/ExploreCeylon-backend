@@ -450,17 +450,6 @@ public class TripService {
         log.info("AI itinerary generated: {} days for trip {}",
                 saved.getDays().size(), req.getTripId());
         return toResponse(saved);
-
-        // Per-day cost is already real (Phase 5): ItineraryAssemblyService
-        // computed each PlannedDay's estimatedDayCost from the actual
-        // chosen stops' entryFeeUsd + accommodation/food/transport
-        // estimates when the day was assembled above — no flat rate-table
-        // overwrite needed here anymore.
-
-        Trip saved = tripRepository.save(trip);
-        log.info("AI itinerary generated: {} days for trip {}",
-                saved.getDays().size(), req.getTripId());
-        return toResponse(saved);
     }
 
     // ── Narrative request body builder (Phase 6 contract) ──

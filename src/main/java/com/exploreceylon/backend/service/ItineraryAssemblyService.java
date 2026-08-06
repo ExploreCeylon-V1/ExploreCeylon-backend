@@ -85,6 +85,7 @@ public class ItineraryAssemblyService {
     // ── Day time-budget tuning ──────────────────────────────
     private static final int MAX_SIGHTSEEING_MINUTES_PER_DAY = 480; // ~8h
     private static final int MAX_TRAVEL_MINUTES_PER_DAY       = 240; // ~3-4h
+    private static final int MAX_STOPS_PER_DAY                = 4;   // Max 4 stops per day for quality, realistic pacing
     private static final double AVG_ROAD_SPEED_KMH            = 40.0; // mountain/coastal roads
 
     // Hard cap on any single stop-to-stop jump in the greedy walk,
@@ -383,10 +384,23 @@ public class ItineraryAssemblyService {
         int travelMin = 0;
         double curLat = origin.lat(), curLng = origin.lng();
 
+        double totalCorridorDist = GeoUtils.distanceKm(origin.lat(), origin.lng(), destination.lat(), destination.lng());
+        com.exploreceylon.backend.service.progression.ProgressionContext progContext =
+                com.exploreceylon.backend.service.progression.ProgressionContext.builder()
+                        .origin(origin)
+                        .destination(destination)
+                        .build();
+
         while (!remaining.isEmpty() && dayBins.size() < tripDurationDays) {
             Destination bestCandidate = null;
             double bestSelectionMetric = -Double.MAX_VALUE;
             double bestDist = Double.MAX_VALUE;
+
+            int currentDayNum = dayBins.size() + 1;
+            double targetProgressRatio = (double) currentDayNum / tripDurationDays;
+            double currentPosProgressKm = journeyProgressionEngine.calculateProgress(
+                    Destination.builder().latitude(curLat).longitude(curLng).build(), progContext
+            ).getProgressDistanceKm();
 
             for (Destination d : remaining) {
                 if (d.getLatitude() == null || d.getLongitude() == null) continue;
@@ -401,8 +415,22 @@ public class ItineraryAssemblyService {
                         .build();
 
                 double rankScore = destinationRankingEngine.calculateScore(d, stepContext);
-                // Balanced selection score: rank score (0-100) minus linear distance penalty
-                double selectionMetric = rankScore - (dist * 0.25);
+
+                // Forward corridor progression scoring
+                double candidateProgressKm = journeyProgressionEngine.calculateProgress(d, progContext).getProgressDistanceKm();
+                double progressRatio = totalCorridorDist > 1.0 ? Math.min(1.0, candidateProgressKm / totalCorridorDist) : 0.0;
+                double currentPosRatio = totalCorridorDist > 1.0 ? Math.min(1.0, currentPosProgressKm / totalCorridorDist) : 0.0;
+
+                double progressionBonus = 0.0;
+                if (totalCorridorDist > 15.0) {
+                    if (progressRatio < currentPosRatio - 0.08) {
+                        progressionBonus -= 50.0; // heavy penalty for backtracking
+                    } else if (progressRatio >= currentPosRatio && progressRatio <= targetProgressRatio + 0.15) {
+                        progressionBonus += (progressRatio - currentPosRatio) * 35.0; // reward advancing along corridor
+                    }
+                }
+
+                double selectionMetric = rankScore - (dist * 0.25) + progressionBonus;
 
                 if (selectionMetric > bestSelectionMetric) {
                     bestSelectionMetric = selectionMetric;
@@ -413,9 +441,6 @@ public class ItineraryAssemblyService {
 
             if (bestCandidate == null) break;
             if (bestDist > MAX_INTER_DAY_JUMP_KM) {
-                // Too far a jump from wherever we are now — unreachable
-                // without breaking the itinerary regardless of which day
-                // it would land on. Drop it and keep looking.
                 remaining.remove(bestCandidate);
                 continue;
             }
@@ -425,7 +450,8 @@ public class ItineraryAssemblyService {
             int travel = routeResult != null ? routeResult.getDrivingDurationMinutes() : (int) Math.round(bestDist / AVG_ROAD_SPEED_KMH * 60);
 
             boolean wouldOverflow = !currentBin.isEmpty()
-                    && (sightseeingMin + dur > MAX_SIGHTSEEING_MINUTES_PER_DAY
+                    && (currentBin.size() >= MAX_STOPS_PER_DAY
+                        || sightseeingMin + dur > MAX_SIGHTSEEING_MINUTES_PER_DAY
                         || travelMin + travel > MAX_TRAVEL_MINUTES_PER_DAY);
 
             if (wouldOverflow) {
