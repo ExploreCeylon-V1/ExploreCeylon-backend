@@ -16,7 +16,7 @@ import java.util.List;
 
 /**
  * Production-ready REST Controller for End-to-End Trip Planning & Persistence API.
- * Exposes endpoints for planner generation, persistent saving, listing, retrieval, and soft deletion.
+ * Exposes endpoints for planner generation, persistent saving, lifecycle management (confirm, duplicate, soft-delete).
  */
 @RestController
 @RequestMapping("/api/v1/planner")
@@ -47,22 +47,38 @@ public class PlannerController {
         return ResponseEntity.ok(response);
     }
 
-    @GetMapping("/trips")
+    @PostMapping("/{id}/confirm")
+    public ResponseEntity<PlannerTripSummary> confirmTrip(@PathVariable("id") Long tripId) {
+        User user = getCurrentUser();
+        log.info("Received Confirm Request for Trip ID {} from User {}", tripId, user.getEmail());
+        PlannerTripSummary summary = plannerPersistenceService.confirmTrip(tripId, user);
+        return ResponseEntity.ok(summary);
+    }
+
+    @PostMapping("/{id}/duplicate")
+    public ResponseEntity<PlannerTripSummary> duplicateTrip(@PathVariable("id") Long tripId) {
+        User user = getCurrentUser();
+        log.info("Received Duplicate Request for Trip ID {} from User {}", tripId, user.getEmail());
+        PlannerTripSummary summary = plannerPersistenceService.duplicateTrip(tripId, user);
+        return ResponseEntity.ok(summary);
+    }
+
+    @GetMapping({"/my-trips", "/trips"})
     public ResponseEntity<List<PlannerTripSummary>> getMyGeneratedTrips() {
         User user = getCurrentUser();
         List<PlannerTripSummary> trips = plannerPersistenceService.getUserGeneratedTrips(user);
         return ResponseEntity.ok(trips);
     }
 
-    @GetMapping("/trips/{tripId}")
-    public ResponseEntity<PlannerResponse> getGeneratedTripById(@PathVariable Long tripId) {
+    @GetMapping({"/{id}", "/trips/{id}"})
+    public ResponseEntity<PlannerResponse> getGeneratedTripById(@PathVariable("id") Long tripId) {
         User user = getCurrentUser();
         PlannerResponse response = plannerPersistenceService.getGeneratedTripById(tripId, user);
         return ResponseEntity.ok(response);
     }
 
-    @DeleteMapping("/trips/{tripId}")
-    public ResponseEntity<Void> softDeleteTrip(@PathVariable Long tripId) {
+    @DeleteMapping({"/{id}", "/trips/{id}"})
+    public ResponseEntity<Void> softDeleteTrip(@PathVariable("id") Long tripId) {
         User user = getCurrentUser();
         plannerPersistenceService.softDeleteTrip(tripId, user);
         return ResponseEntity.noContent().build();

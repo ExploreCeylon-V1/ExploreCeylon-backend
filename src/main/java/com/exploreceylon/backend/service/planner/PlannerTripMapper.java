@@ -15,7 +15,8 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 
 /**
- * Mapper component converting PlannerResponse and PlannerRequest into persistent Trip entities.
+ * Mapper component converting PlannerResponse and PlannerRequest into persistent Trip entities,
+ * as well as Phase 13 PlannerMetadata and PlannerCostSnapshot.
  */
 @Component
 public class PlannerTripMapper {
@@ -77,6 +78,40 @@ public class PlannerTripMapper {
         }
 
         return trip;
+    }
+
+    public PlannerMetadata mapToMetadata(PlannerResponse response, Trip trip) {
+        if (response == null || trip == null) return null;
+        double score = response.getQualityScore();
+        long timeMs = response.getStatistics() != null ? response.getStatistics().getTotalPipelineExecutionTimeMs() : 0L;
+
+        return PlannerMetadata.builder()
+                .trip(trip)
+                .plannerVersion("13.0")
+                .qualityScore(score)
+                .generationTimeMs(timeMs)
+                .executionTimeMs(timeMs)
+                .routeReuse(true)
+                .aiProvider("GROQ / ExploreCeylon Narrative")
+                .fallbackUsed(false)
+                .build();
+    }
+
+    public PlannerCostSnapshot mapToCostSnapshot(PlannerResponse response, Trip trip) {
+        if (response == null || response.getEstimatedCost() == null || trip == null) return null;
+        var est = response.getEstimatedCost();
+        var bd = est.getTotalBreakdown();
+
+        return PlannerCostSnapshot.builder()
+                .trip(trip)
+                .grandTotal(est.getGrandTotal())
+                .transportCost(bd != null ? bd.getTransportCost() : 0.0)
+                .entranceTicketsCost(bd != null ? bd.getEntranceTicketsCost() : 0.0)
+                .foodCost(bd != null ? bd.getFoodCost() : 0.0)
+                .hiddenGemsCost(bd != null ? bd.getHiddenGemsCost() : 0.0)
+                .parkingCost(bd != null ? bd.getParkingCost() : 0.0)
+                .miscCost(bd != null ? bd.getMiscCost() : 0.0)
+                .build();
     }
 
     public PlannerTripSummary mapToSummary(Trip trip) {

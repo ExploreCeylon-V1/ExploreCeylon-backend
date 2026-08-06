@@ -9,11 +9,15 @@ import com.exploreceylon.backend.model.User;
 import java.util.List;
 
 /**
- * Interface contract for persisting, retrieving, and soft-deleting generated user trips.
+ * Interface contract for persisting, retrieving, confirming, duplicating, and soft-deleting generated user trips.
  */
 public interface PlannerPersistenceService {
 
     PlannerSaveResponse generateAndSave(PlannerSaveRequest saveRequest, User authenticatedUser);
+
+    PlannerTripSummary confirmTrip(Long tripId, User authenticatedUser);
+
+    PlannerTripSummary duplicateTrip(Long tripId, User authenticatedUser);
 
     List<PlannerTripSummary> getUserGeneratedTrips(User authenticatedUser);
 

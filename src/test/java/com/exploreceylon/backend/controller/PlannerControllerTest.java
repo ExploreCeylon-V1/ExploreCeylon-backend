@@ -26,6 +26,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -120,6 +121,41 @@ class PlannerControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.tripId").value(500L))
                 .andExpect(jsonPath("$.shareToken").value("share-500"));
+    }
+
+    @Test
+    @WithMockUser(username = "user@example.com")
+    @DisplayName("POST /api/v1/planner/{id}/confirm should return confirmed trip summary")
+    void testConfirmTripEndpointSuccess() throws Exception {
+        PlannerTripSummary summary = PlannerTripSummary.builder()
+                .tripId(500L)
+                .status(TripStatus.CONFIRMED)
+                .build();
+
+        Mockito.when(plannerPersistenceService.confirmTrip(eq(500L), any())).thenReturn(summary);
+
+        mockMvc.perform(post("/api/v1/planner/500/confirm"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.tripId").value(500L))
+                .andExpect(jsonPath("$.status").value("CONFIRMED"));
+    }
+
+    @Test
+    @WithMockUser(username = "user@example.com")
+    @DisplayName("POST /api/v1/planner/{id}/duplicate should return duplicated trip summary")
+    void testDuplicateTripEndpointSuccess() throws Exception {
+        PlannerTripSummary summary = PlannerTripSummary.builder()
+                .tripId(501L)
+                .title("Copy of Original Trip")
+                .status(TripStatus.GENERATED)
+                .build();
+
+        Mockito.when(plannerPersistenceService.duplicateTrip(eq(500L), any())).thenReturn(summary);
+
+        mockMvc.perform(post("/api/v1/planner/500/duplicate"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.tripId").value(501L))
+                .andExpect(jsonPath("$.title").value("Copy of Original Trip"));
     }
 
     @Test

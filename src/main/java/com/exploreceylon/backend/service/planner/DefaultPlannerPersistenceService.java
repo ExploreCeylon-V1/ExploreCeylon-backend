@@ -1,9 +1,10 @@
 package com.exploreceylon.backend.service.planner;
 
 import com.exploreceylon.backend.dto.planner.*;
-import com.exploreceylon.backend.model.Trip;
+import com.exploreceylon.backend.model.*;
 import com.exploreceylon.backend.model.Trip.TripStatus;
-import com.exploreceylon.backend.model.User;
+import com.exploreceylon.backend.repository.PlannerCostSnapshotRepository;
+import com.exploreceylon.backend.repository.PlannerMetadataRepository;
 import com.exploreceylon.backend.repository.TripRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -12,12 +13,13 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Objects;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 /**
- * Default implementation of PlannerPersistenceService.
- * Handles single-transaction persistence of generated trips, ownership verification (anti-IDOR),
- * and soft-deletion.
+ * Default implementation of PlannerPersistenceService for Phase 13.
+ * Handles single-transaction persistence of generated trips, metadata, read-only cost snapshots,
+ * ownership verification (anti-IDOR), trip confirmation, duplication, and soft-deletion.
  */
 @Service
 @RequiredArgsConstructor
@@ -26,6 +28,8 @@ public class DefaultPlannerPersistenceService implements PlannerPersistenceServi
 
     private final PlannerFacadeService plannerFacadeService;
     private final TripRepository tripRepository;
+    private final PlannerMetadataRepository plannerMetadataRepository;
+    private final PlannerCostSnapshotRepository plannerCostSnapshotRepository;
     private final PlannerTripMapper plannerTripMapper;
 
     @Override
@@ -48,6 +52,18 @@ public class DefaultPlannerPersistenceService implements PlannerPersistenceServi
 
         Trip savedTrip = tripRepository.save(tripEntity);
 
+        // Save Planner Metadata
+        PlannerMetadata metadata = plannerTripMapper.mapToMetadata(response, savedTrip);
+        if (metadata != null) {
+            plannerMetadataRepository.save(metadata);
+        }
+
+        // Save Read-Only AI Estimated Cost Snapshot
+        PlannerCostSnapshot costSnapshot = plannerTripMapper.mapToCostSnapshot(response, savedTrip);
+        if (costSnapshot != null) {
+            plannerCostSnapshotRepository.save(costSnapshot);
+        }
+
         response.setTripId(savedTrip.getId());
         response.setCreatedAt(savedTrip.getCreatedAt());
         response.setOwner(authenticatedUser.getEmail());
@@ -62,6 +78,42 @@ public class DefaultPlannerPersistenceService implements PlannerPersistenceServi
                 .createdAt(savedTrip.getCreatedAt())
                 .plannerResponse(response)
                 .build();
+    }
+
+    @Override
+    @Transactional
+    public PlannerTripSummary confirmTrip(Long tripId, User authenticatedUser) {
+        Trip trip = findTripAndVerifyOwner(tripId, authenticatedUser);
+        trip.setStatus(TripStatus.CONFIRMED);
+        Trip updatedTrip = tripRepository.save(trip);
+        log.info("Trip ID {} confirmed by user {}", tripId, authenticatedUser.getEmail());
+        return plannerTripMapper.mapToSummary(updatedTrip);
+    }
+
+    @Override
+    @Transactional
+    public PlannerTripSummary duplicateTrip(Long tripId, User authenticatedUser) {
+        Trip originalTrip = findTripAndVerifyOwner(tripId, authenticatedUser);
+
+        Trip duplicatedTrip = Trip.builder()
+                .user(authenticatedUser)
+                .title("Copy of " + originalTrip.getTitle())
+                .fromLocation(originalTrip.getFromLocation())
+                .toLocation(originalTrip.getToLocation())
+                .startDate(originalTrip.getStartDate())
+                .endDate(originalTrip.getEndDate())
+                .travelStyle(originalTrip.getTravelStyle())
+                .budgetRange(originalTrip.getBudgetRange())
+                .groupSize(originalTrip.getGroupSize())
+                .budgetAmountLkr(originalTrip.getBudgetAmountLkr())
+                .status(TripStatus.GENERATED)
+                .aiGenerated(true)
+                .shareToken(UUID.randomUUID().toString())
+                .build();
+
+        Trip savedDuplicate = tripRepository.save(duplicatedTrip);
+        log.info("Trip ID {} duplicated into new Trip ID {} for user {}", tripId, savedDuplicate.getId(), authenticatedUser.getEmail());
+        return plannerTripMapper.mapToSummary(savedDuplicate);
     }
 
     @Override
