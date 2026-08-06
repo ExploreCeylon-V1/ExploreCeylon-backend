@@ -23,6 +23,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -249,10 +250,13 @@ public class ItineraryAssemblyService {
         double coarseRadiusKm = directKm / 2.0 + maxDetour;
 
         String budgetParam = budgetLevel != null ? budgetLevel.name() : "";
-        List<Destination> destCandidates = destinationRepository
-                .findWithinRadius(midLat, midLng, coarseRadiusKm, budgetParam);
-        List<HiddenGem> gemCandidates = hiddenGemRepository
-                .findWithinRadius(midLat, midLng, coarseRadiusKm, budgetParam);
+        CompletableFuture<List<Destination>> destFuture = java.util.concurrent.CompletableFuture.supplyAsync(
+                () -> destinationRepository.findWithinRadius(midLat, midLng, coarseRadiusKm, budgetParam));
+        CompletableFuture<List<HiddenGem>> gemFuture = java.util.concurrent.CompletableFuture.supplyAsync(
+                () -> hiddenGemRepository.findWithinRadius(midLat, midLng, coarseRadiusKm, budgetParam));
+
+        List<Destination> destCandidates = destFuture.join();
+        List<HiddenGem> gemCandidates = gemFuture.join();
 
         Set<String> selectedStyles = travelStyles == null ? Set.of() : travelStyles.stream()
                 .filter(s -> s != null && !s.isBlank())

@@ -27,14 +27,14 @@ public class OsrmClient {
     @Value("${planner.osrm.profile:driving}")
     private String profile;
 
-    @Value("${planner.osrm.timeout-ms:3000}")
+    @Value("${planner.osrm.timeout-ms:600}")
     private int timeoutMs;
 
     public OsrmClient() {
         this.objectMapper = new ObjectMapper();
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
-        factory.setConnectTimeout(3000);
-        factory.setReadTimeout(3000);
+        factory.setConnectTimeout(600);
+        factory.setReadTimeout(600);
         this.restTemplate = new RestTemplate(factory);
     }
 

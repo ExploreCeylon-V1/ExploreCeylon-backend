@@ -18,6 +18,11 @@ public final class GeoUtils {
         return EARTH_RADIUS_KM * c;
     }
 
+    // Estimated road distance in kilometers using Haversine distance x 1.25 winding factor
+    public static double roadDistanceKm(double lat1, double lng1, double lat2, double lng2) {
+        return distanceKm(lat1, lng1, lat2, lng2) * 1.25;
+    }
+
     // Projects (lat,lng) onto the line from (originLat,originLng) to (destLat,destLng)
     // using an equirectangular approximation (adequate at Sri Lanka's scale, ~500km).
     // Returns the distance in km from origin, measured ALONG the origin→destination
