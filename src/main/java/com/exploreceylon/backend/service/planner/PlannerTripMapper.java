@@ -205,7 +205,7 @@ public class PlannerTripMapper {
                 .build();
 
         com.exploreceylon.backend.dto.narrative.NarrativeResponse narrative = com.exploreceylon.backend.dto.narrative.NarrativeResponse.builder()
-                .overview("Your saved journey from " + trip.getFromLocation() + " to " + trip.getToLocation())
+                .tripOverview("Your saved journey from " + trip.getFromLocation() + " to " + trip.getToLocation())
                 .build();
 
         return PlannerResponse.builder()

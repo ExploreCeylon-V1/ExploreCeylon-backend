@@ -31,6 +31,7 @@ class PlannerPersistenceServiceTest {
     private PlannerMetadataRepository metadataRepository;
     private PlannerCostSnapshotRepository costSnapshotRepository;
     private PlannerTripMapper tripMapper;
+    private com.exploreceylon.backend.repository.TripActivityLogRepository activityLogRepository;
 
     private User owner;
     private User attacker;
@@ -41,10 +42,11 @@ class PlannerPersistenceServiceTest {
         tripRepository = Mockito.mock(TripRepository.class);
         metadataRepository = Mockito.mock(PlannerMetadataRepository.class);
         costSnapshotRepository = Mockito.mock(PlannerCostSnapshotRepository.class);
+        activityLogRepository = Mockito.mock(com.exploreceylon.backend.repository.TripActivityLogRepository.class);
         tripMapper = new PlannerTripMapper();
 
         persistenceService = new DefaultPlannerPersistenceService(
-                facadeService, tripRepository, metadataRepository, costSnapshotRepository, tripMapper);
+                facadeService, tripRepository, metadataRepository, costSnapshotRepository, tripMapper, activityLogRepository);
 
         owner = User.builder().id(1L).email("owner@example.com").role(User.Role.TRAVELER).build();
         attacker = User.builder().id(2L).email("attacker@example.com").role(User.Role.TRAVELER).build();

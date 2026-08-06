@@ -31,6 +31,7 @@ public class DefaultPlannerPersistenceService implements PlannerPersistenceServi
     private final PlannerMetadataRepository plannerMetadataRepository;
     private final PlannerCostSnapshotRepository plannerCostSnapshotRepository;
     private final PlannerTripMapper plannerTripMapper;
+    private final com.exploreceylon.backend.repository.TripActivityLogRepository activityLogRepository;
 
     @Override
     @Transactional
@@ -179,7 +180,66 @@ public class DefaultPlannerPersistenceService implements PlannerPersistenceServi
         Trip trip = findTripAndVerifyOwner(tripId, authenticatedUser);
         trip.setStatus(TripStatus.CANCELLED);
         tripRepository.save(trip);
+        recordActivityLog(tripId, "TRIP_CANCELLED", "Trip marked as cancelled", authenticatedUser.getEmail());
         log.info("Soft-deleted Trip ID {} by user {}", tripId, authenticatedUser.getEmail());
+    }
+
+    @Override
+    @Transactional
+    public PlannerTripSummary restoreTrip(Long tripId, User authenticatedUser) {
+        Trip trip = findTripAndVerifyOwner(tripId, authenticatedUser);
+        trip.setStatus(TripStatus.PLANNING);
+        Trip savedTrip = tripRepository.save(trip);
+        recordActivityLog(tripId, "TRIP_RESTORED", "Cancelled trip restored to Planning state", authenticatedUser.getEmail());
+        log.info("Restored Trip ID {} by user {}", tripId, authenticatedUser.getEmail());
+        return plannerTripMapper.mapToSummary(savedTrip);
+    }
+
+    @Override
+    @Transactional
+    public PlannerTripSummary revokeShareToken(Long tripId, User authenticatedUser) {
+        Trip trip = findTripAndVerifyOwner(tripId, authenticatedUser);
+        trip.setShareToken(null);
+        Trip savedTrip = tripRepository.save(trip);
+        recordActivityLog(tripId, "SHARE_REVOKED", "Public share token revoked", authenticatedUser.getEmail());
+        log.info("Revoked share token for Trip ID {} by user {}", tripId, authenticatedUser.getEmail());
+        return plannerTripMapper.mapToSummary(savedTrip);
+    }
+
+    @Override
+    @Transactional
+    public PlannerTripSummary regenerateShareToken(Long tripId, User authenticatedUser) {
+        Trip trip = findTripAndVerifyOwner(tripId, authenticatedUser);
+        trip.setShareToken(UUID.randomUUID().toString());
+        Trip savedTrip = tripRepository.save(trip);
+        recordActivityLog(tripId, "SHARE_REGENERATED", "Generated new public share token", authenticatedUser.getEmail());
+        log.info("Regenerated share token for Trip ID {} by user {}", tripId, authenticatedUser.getEmail());
+        return plannerTripMapper.mapToSummary(savedTrip);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<com.exploreceylon.backend.model.TripActivityLog> getTripActivityLogs(Long tripId, User authenticatedUser) {
+        findTripAndVerifyOwner(tripId, authenticatedUser);
+        return activityLogRepository.findByTripIdOrderByCreatedAtDesc(tripId);
+    }
+
+    @Override
+    @Transactional
+    public void recordActivityLog(Long tripId, String actionType, String description, String performedBy) {
+        try {
+            Trip trip = tripRepository.findById(tripId).orElse(null);
+            if (trip != null) {
+                activityLogRepository.save(com.exploreceylon.backend.model.TripActivityLog.builder()
+                        .trip(trip)
+                        .actionType(actionType)
+                        .description(description)
+                        .performedBy(performedBy)
+                        .build());
+            }
+        } catch (Exception e) {
+            log.warn("Failed recording activity log for Trip ID {}: {}", tripId, e.getMessage());
+        }
     }
 
     private Trip findTripAndVerifyOwner(Long tripId, User user) {

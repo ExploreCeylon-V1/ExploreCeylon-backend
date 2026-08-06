@@ -24,4 +24,14 @@ public interface PlannerPersistenceService {
     PlannerResponse getGeneratedTripById(Long tripId, User authenticatedUser);
 
     void softDeleteTrip(Long tripId, User authenticatedUser);
+
+    PlannerTripSummary restoreTrip(Long tripId, User authenticatedUser);
+
+    PlannerTripSummary revokeShareToken(Long tripId, User authenticatedUser);
+
+    PlannerTripSummary regenerateShareToken(Long tripId, User authenticatedUser);
+
+    List<com.exploreceylon.backend.model.TripActivityLog> getTripActivityLogs(Long tripId, User authenticatedUser);
+
+    void recordActivityLog(Long tripId, String actionType, String description, String performedBy);
 }
