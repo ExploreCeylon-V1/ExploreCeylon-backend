@@ -34,6 +34,8 @@ public class TripService {
     private final GuideBookingRepository   guideBookingRepository;
     private final BudgetRepository         budgetRepository;
     private final ItineraryAssemblyService itineraryAssemblyService;
+    private final com.exploreceylon.backend.service.planner.PlannerFacadeService plannerFacadeService;
+    private final com.exploreceylon.backend.service.planner.PlannerTripMapper plannerTripMapper;
 
     // Fixed conversion used only to compare the assembled itinerary's
     // USD cost estimate against a user's LKR budget target (fix 4).
@@ -371,53 +373,22 @@ public class TripService {
                         : (req.getTravelStyle() != null
                                 ? List.of(req.getTravelStyle().name()) : List.of());
 
-        // ── Deterministic day/stop assembly — the backend, not the LLM,
-        // now decides which stops go on which day (Phase 4). ───────────
-        List<ItineraryAssemblyService.PlannedDay> plannedDays =
-                itineraryAssemblyService.assemble(
-                        origin, destinationPoint, req.getStartDate(),
-                        expectedDays, groupSize, budgetLevel,
-                        travelStylesList);
+        // ── Execute full 13-phase Planner Facade Pipeline ────────────
+        com.exploreceylon.backend.dto.planner.PlannerRequest plannerRequest =
+                com.exploreceylon.backend.dto.planner.PlannerRequest.builder()
+                        .origin(startingPoint)
+                        .destination(destinationQuery != null ? destinationQuery : startingPoint)
+                        .tripDays(expectedDays)
+                        .budget(budgetRange)
+                        .travelStyle(travelStyle)
+                        .groupSize(groupSize)
+                        .startDate(req.getStartDate())
+                        .preferences(interests)
+                        .specialNotes(req.getSpecialNotes())
+                        .build();
 
-        if (plannedDays.stream().allMatch(d -> d.stops().isEmpty())) {
-            throw new RuntimeException(
-                    "Could not find any destinations/gems near this route to build an itinerary");
-        }
-
-        // ── Ask the AI service to write narrative only (title, per-day
-        // theme/tips, per-stop description) for this fixed structure. A
-        // failure here degrades gracefully to generic text instead of
-        // failing the whole generation — the itinerary structure itself
-        // is already valid without the LLM's involvement. ──────────────
-        JsonNode narrativeData = null;
-        try {
-            JsonNode narrativeResp = aiService.generateNarrative(
-                    buildNarrativeRequestBody(req, travelStyle, budgetRange,
-                            startingPoint, trip.getToLocation(), groupSize, plannedDays)
-            ).block();
-            if (narrativeResp != null
-                    && narrativeResp.path("success").asBoolean(false)) {
-                narrativeData = narrativeResp.path("data");
-            }
-        } catch (Exception e) {
-            log.warn("AI narrative generation failed, using generic day text: {}",
-                    e.getMessage());
-        }
-
-        // Update title with AI's title, but only if the user hasn't
-        // already customized it (renamed away from the auto-generated
-        // placeholder) since the trip was created.
-        String autoTitle = generateTripTitle(
-                trip.getFromLocation(), trip.getToLocation(),
-                trip.getStartDate(), trip.getEndDate());
-        String aiTitle = narrativeData != null
-                ? narrativeData.path("tripTitle").asText(null) : null;
-        boolean titleIsCustomized = trip.getTitle() != null
-                && !trip.getTitle().equals(autoTitle);
-        if (aiTitle != null && !aiTitle.isBlank() && !titleIsCustomized) {
-            trip.setTitle(aiTitle);
-        }
-        trip.setAiGenerated(true);
+        com.exploreceylon.backend.dto.planner.PlannerResponse plannerResponse =
+                plannerFacadeService.generateItinerary(plannerRequest);
 
         // Update preference
         if (trip.getPreference() != null) {
@@ -427,143 +398,58 @@ public class TripService {
             trip.getPreference().setSpecialNotes(req.getSpecialNotes());
         }
 
-        // Clear existing days then rebuild from the planned structure
+        // Clear existing days then rebuild from the 13-phase planned structure
         trip.getDays().clear();
         tripRepository.save(trip);
 
-        for (ItineraryAssemblyService.PlannedDay pd : plannedDays) {
-            JsonNode narrativeDay = findNarrativeDay(narrativeData, pd.dayNumber());
-            String theme = textOrNull(narrativeDay, "theme");
-            String tips  = textOrNull(narrativeDay, "tips");
-
-            TripDay day = TripDay.builder()
-                    .trip(trip)
-                    .dayNumber(pd.dayNumber())
-                    .date(pd.date())
-                    .region(pd.region())
-                    .theme(theme != null ? theme
-                            : "Day " + pd.dayNumber() + ": " + pd.region())
-                    .tips(tips)
-                    .estimatedDayCost(pd.estimatedDayCost())
-                    .build();
-
-            List<ItineraryAssemblyService.PlannedStop> stops = pd.stops();
-            JsonNode narrativeStops = narrativeDay != null
-                    ? narrativeDay.path("stops") : null;
-            for (int i = 0; i < stops.size(); i++) {
-                ItineraryAssemblyService.PlannedStop stop = stops.get(i);
-                String description = (narrativeStops != null && narrativeStops.isArray()
-                        && i < narrativeStops.size())
-                        ? textOrNull(narrativeStops.get(i), "description")
-                        : null;
-
-                TripDayItem.ItemType itemType =
-                        stop.type() == ItineraryAssemblyService.StopType.GEM
-                                ? TripDayItem.ItemType.GEM
-                                : TripDayItem.ItemType.ACTIVITY;
-                String titlePrefix = switch (stop.type()) {
-                    case GEM   -> "Hidden Gem: ";
-                    case EVENT -> "Festival: ";
-                    case DESTINATION -> "";
-                };
-
-                StringBuilder notes = new StringBuilder(
-                        "[" + capitalizeSlot(stop.slot()) + "]");
-                if (description != null && !description.isBlank()) {
-                    notes.append(" ").append(description);
-                }
-                if (stop.type() == ItineraryAssemblyService.StopType.EVENT) {
-                    notes.append(" Special festival event on this day!");
-                }
-
-                TripDayItem item = TripDayItem.builder()
-                        .tripDay(day)
-                        .type(itemType)
-                        .title(titlePrefix + stop.name())
-                        .referenceId(stop.referenceId() != null
-                                ? stop.referenceId().toString() : null)
-                        .cost(stop.costUsd() != null ? stop.costUsd() : 0.0)
-                        .currency("USD")
-                        .orderIndex(i)
-                        .notes(notes.toString())
+        if (plannerResponse.getDays() != null) {
+            for (ItineraryAssemblyService.PlannedDay pd : plannerResponse.getDays()) {
+                TripDay day = TripDay.builder()
+                        .trip(trip)
+                        .dayNumber(pd.dayNumber())
+                        .date(pd.date())
+                        .region(pd.region())
+                        .theme("Day " + pd.dayNumber() + ": " + pd.region())
+                        .tips("Optimized via ExploreCeylon 13-Phase Pipeline")
+                        .estimatedDayCost(pd.estimatedDayCost())
+                        .items(new java.util.ArrayList<>())
                         .build();
-                day.getItems().add(item);
-            }
-            trip.getDays().add(day);
-        }
 
-        // Per-day monsoon check — flags each day's ACTUAL final region and
-        // date, unlike the pre-generation check the AI service already does
-        // internally against just the trip's single top-level destination.
-        Map<String, String> monsoonNoteByRegion = new HashMap<>();
-        for (TripDay day : trip.getDays()) {
-            String region = day.getRegion();
-            if (region == null || region.isBlank()
-                    || monsoonNoteByRegion.containsKey(region)) {
-                continue;
-            }
-            String note = null;
-            try {
-                JsonNode monsoonResp = aiService.checkMonsoon(
-                        List.of(region), day.getDate().toString(),
-                        day.getDate().toString()).block();
-                JsonNode monsoonData = monsoonResp != null
-                        ? monsoonResp.path("data") : null;
-                if (monsoonData != null
-                        && monsoonData.path("has_warning").asBoolean(false)
-                        && monsoonData.path("warnings").isArray()
-                        && !monsoonData.path("warnings").isEmpty()) {
-                    note = monsoonData.path("warnings").get(0)
-                            .path("recommendation").asText(null);
+                if (pd.stops() != null) {
+                    int order = 1;
+                    for (ItineraryAssemblyService.PlannedStop s : pd.stops()) {
+                        TripDayItem.ItemType itemType =
+                                s.type() == ItineraryAssemblyService.StopType.GEM
+                                        ? TripDayItem.ItemType.GEM
+                                        : TripDayItem.ItemType.ACTIVITY;
+
+                        TripDayItem item = TripDayItem.builder()
+                                .tripDay(day)
+                                .type(itemType)
+                                .title(s.name())
+                                .referenceId(s.referenceId() != null ? s.referenceId().toString() : null)
+                                .cost(s.costUsd() != null ? s.costUsd() : 0.0)
+                                .currency("USD")
+                                .orderIndex(order++)
+                                .notes("[" + s.slot() + "] " + s.name())
+                                .build();
+                        day.getItems().add(item);
+                    }
                 }
-            } catch (Exception e) {
-                log.warn("Monsoon check failed for region {}: {}",
-                        region, e.getMessage());
-            }
-            monsoonNoteByRegion.put(region, note);
-        }
-        for (TripDay day : trip.getDays()) {
-            String note = monsoonNoteByRegion.get(day.getRegion());
-            if (note != null && !note.isBlank()) {
-                String warningLine = "⚠️ Monsoon note: " + note;
-                String existingTips = day.getTips();
-                day.setTips(existingTips == null || existingTips.isBlank()
-                        ? warningLine
-                        : existingTips + " " + warningLine);
+                trip.getDays().add(day);
             }
         }
 
-        // ── Budget validation (fix 4) — warning only, no automatic
-        // destination substitution (out of scope, see NOTE in
-        // ItineraryAssemblyService.computeDayCost). Compares the
-        // itinerary's total estimated cost (USD, summed from each
-        // PlannedDay's real estimatedDayCost) against the user's numeric
-        // LKR budget target, if one was set. ─────────────────────────
-        if (req.getBudgetAmountLkr() != null) {
-            trip.setBudgetAmountLkr(req.getBudgetAmountLkr());
+        trip.setAiGenerated(true);
+        trip.setStatus(TripStatus.GENERATED);
+        if (plannerResponse.getEstimatedCost() != null) {
+            trip.setBudgetAmountLkr(plannerResponse.getEstimatedCost().getGrandTotal());
         }
-        if (trip.getBudgetAmountLkr() != null && !trip.getDays().isEmpty()) {
-            double totalUsd = plannedDays.stream()
-                    .mapToDouble(ItineraryAssemblyService.PlannedDay::estimatedDayCost)
-                    .sum();
-            double totalLkr = totalUsd * USD_TO_LKR_RATE;
-            double budgetLkr = trip.getBudgetAmountLkr();
-            if (totalLkr > budgetLkr) {
-                double overPercent = ((totalLkr - budgetLkr) / budgetLkr) * 100.0;
-                String warningLine = String.format(
-                        "⚠️ Budget note: estimated cost (LKR %.0f) exceeds your budget of LKR %.0f by %.0f%%",
-                        totalLkr, budgetLkr, overPercent);
-                TripDay firstDay = trip.getDays().stream()
-                        .min(java.util.Comparator.comparingInt(TripDay::getDayNumber))
-                        .orElse(null);
-                if (firstDay != null) {
-                    String existingTips = firstDay.getTips();
-                    firstDay.setTips(existingTips == null || existingTips.isBlank()
-                            ? warningLine
-                            : existingTips + " " + warningLine);
-                }
-            }
-        }
+
+        Trip saved = tripRepository.save(trip);
+        log.info("AI itinerary generated: {} days for trip {}",
+                saved.getDays().size(), req.getTripId());
+        return toResponse(saved);
 
         // Per-day cost is already real (Phase 5): ItineraryAssemblyService
         // computed each PlannedDay's estimatedDayCost from the actual
