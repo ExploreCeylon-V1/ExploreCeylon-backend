@@ -36,6 +36,9 @@ public class TripService {
     private final ItineraryAssemblyService itineraryAssemblyService;
     private final com.exploreceylon.backend.service.planner.PlannerFacadeService plannerFacadeService;
     private final com.exploreceylon.backend.service.planner.PlannerTripMapper plannerTripMapper;
+    private final com.exploreceylon.backend.repository.PlannerMetadataRepository plannerMetadataRepository;
+    private final com.exploreceylon.backend.repository.PlannerCostSnapshotRepository plannerCostSnapshotRepository;
+    private final com.exploreceylon.backend.repository.TripActivityLogRepository activityLogRepository;
 
     // Fixed conversion used only to compare the assembled itinerary's
     // USD cost estimate against a user's LKR budget target (fix 4).
@@ -294,12 +297,20 @@ public class TripService {
                     guideBookingRepository.save(b);
                 });
 
+        // Clean up planner metadata, cost snapshots, and activity logs to prevent FK constraint errors
+        plannerMetadataRepository.findByTripId(id)
+                .ifPresent(plannerMetadataRepository::delete);
+        plannerCostSnapshotRepository.findByTripId(id)
+                .ifPresent(plannerCostSnapshotRepository::delete);
+        activityLogRepository.findByTripIdOrderByCreatedAtDesc(id)
+                .forEach(activityLogRepository::delete);
+
         // The budget (and its items, via cascade) belongs to the trip.
         budgetRepository.findByTripId(id)
                 .ifPresent(budgetRepository::delete);
 
         tripRepository.deleteById(id);
-        log.info("Trip deleted: {}", id);
+        log.info("Trip deleted cleanly: {}", id);
     }
 
     // ── Generate AI Itinerary ──────────────────────────────
