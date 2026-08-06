@@ -86,6 +86,12 @@ public class DefaultPlannerPersistenceService implements PlannerPersistenceServi
         Trip trip = findTripAndVerifyOwner(tripId, authenticatedUser);
         trip.setStatus(TripStatus.CONFIRMED);
         Trip updatedTrip = tripRepository.save(trip);
+
+        plannerMetadataRepository.findByTrip(updatedTrip).ifPresent(meta -> {
+            meta.setVersionNumber(meta.getVersionNumber() != null ? meta.getVersionNumber() + 1 : 2);
+            plannerMetadataRepository.save(meta);
+        });
+
         log.info("Trip ID {} confirmed by user {}", tripId, authenticatedUser.getEmail());
         return plannerTripMapper.mapToSummary(updatedTrip);
     }
@@ -112,6 +118,19 @@ public class DefaultPlannerPersistenceService implements PlannerPersistenceServi
                 .build();
 
         Trip savedDuplicate = tripRepository.save(duplicatedTrip);
+
+        plannerMetadataRepository.save(PlannerMetadata.builder()
+                .trip(savedDuplicate)
+                .plannerVersion("13.0")
+                .qualityScore(95.0)
+                .generationTimeMs(100L)
+                .executionTimeMs(100L)
+                .routeReuse(true)
+                .aiProvider("GROQ / ExploreCeylon Narrative")
+                .versionNumber(1)
+                .editCount(0)
+                .build());
+
         log.info("Trip ID {} duplicated into new Trip ID {} for user {}", tripId, savedDuplicate.getId(), authenticatedUser.getEmail());
         return plannerTripMapper.mapToSummary(savedDuplicate);
     }

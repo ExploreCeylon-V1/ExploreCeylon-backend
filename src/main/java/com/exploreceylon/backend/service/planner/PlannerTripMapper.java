@@ -94,6 +94,8 @@ public class PlannerTripMapper {
                 .routeReuse(true)
                 .aiProvider("GROQ / ExploreCeylon Narrative")
                 .fallbackUsed(false)
+                .versionNumber(1)
+                .editCount(0)
                 .build();
     }
 
