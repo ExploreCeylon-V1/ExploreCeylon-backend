@@ -52,6 +52,8 @@ public class ItineraryAssemblyService {
     private final com.exploreceylon.backend.service.selection.DestinationSelectionEngine destinationSelectionEngine;
     private final com.exploreceylon.backend.service.matrix.RouteMatrixEngine routeMatrixEngine;
     private final com.exploreceylon.backend.service.matrix.TimelineOptimizer timelineOptimizer;
+    private final com.exploreceylon.backend.service.timeline.AttractionScheduleEngine attractionScheduleEngine;
+    private final com.exploreceylon.backend.service.timeline.TimelineValidationService timelineValidationService;
 
     // ── Corridor detour tuning ──────────────────────────────
     // maxDetourKm = BASE_DETOUR_KM + tripDurationDays * PER_DAY_DETOUR_ALLOWANCE_KM
