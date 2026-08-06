@@ -7,6 +7,9 @@ import com.exploreceylon.backend.model.HiddenGem;
 import com.exploreceylon.backend.repository.DestinationRepository;
 import com.exploreceylon.backend.repository.EventRepository;
 import com.exploreceylon.backend.repository.HiddenGemRepository;
+import com.exploreceylon.backend.service.ranking.DestinationRankingEngine;
+import com.exploreceylon.backend.service.ranking.RankingContext;
+import com.exploreceylon.backend.util.DistanceCalculator;
 import com.exploreceylon.backend.util.GeoUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -41,6 +44,18 @@ public class ItineraryAssemblyService {
     private final HiddenGemRepository   hiddenGemRepository;
     private final EventRepository       eventRepository;
     private final com.exploreceylon.backend.repository.LocationRepository locationRepository;
+    private final DestinationRankingEngine destinationRankingEngine;
+    private final DistanceCalculator distanceCalculator;
+    private final com.exploreceylon.backend.service.corridor.TravelCorridorEngine travelCorridorEngine;
+    private final com.exploreceylon.backend.service.progression.JourneyProgressionEngine journeyProgressionEngine;
+    private final com.exploreceylon.backend.service.budget.DayBudgetEngine dayBudgetEngine;
+    private final com.exploreceylon.backend.service.selection.DestinationSelectionEngine destinationSelectionEngine;
+    private final com.exploreceylon.backend.service.matrix.RouteMatrixEngine routeMatrixEngine;
+    private final com.exploreceylon.backend.service.matrix.TimelineOptimizer timelineOptimizer;
+    private final com.exploreceylon.backend.service.timeline.AttractionScheduleEngine attractionScheduleEngine;
+    private final com.exploreceylon.backend.service.timeline.TimelineValidationService timelineValidationService;
+    private final com.exploreceylon.backend.service.recommendation.GemRecommendationEngine gemRecommendationEngine;
+    private final com.exploreceylon.backend.service.narrative.NarrativeGenerationService narrativeGenerationService;
 
     // ── Corridor detour tuning ──────────────────────────────
     // maxDetourKm = BASE_DETOUR_KM + tripDurationDays * PER_DAY_DETOUR_ALLOWANCE_KM
@@ -215,6 +230,9 @@ public class ItineraryAssemblyService {
     /** Candidate pool: corridor + budget/style/season filtered destinations and gems. */
     public record CandidatePool(List<Destination> destinations, List<HiddenGem> gems) {}
 
+    /** Trip day containing assigned destinations, hidden gems, and events. */
+    public record TripDay(int dayNumber, List<Destination> destinations, List<HiddenGem> gems, List<Event> events) {}
+
     public CandidatePool buildCandidatePool(
             GeoPoint origin, GeoPoint destination, int tripDurationDays,
             BudgetLevel budgetLevel, List<String> travelStyles,
@@ -249,6 +267,43 @@ public class ItineraryAssemblyService {
                             && matchesSeason(d.getBestMonths(), tripMonths)))
                 .collect(Collectors.toList());
 
+        RankingContext poolContext = RankingContext.builder()
+                .origin(origin)
+                .currentPosition(origin)
+                .destination(destination)
+                .travelStyles(travelStyles)
+                .tripMonths(tripMonths)
+                .budgetLevel(budgetLevel)
+                .build();
+
+        com.exploreceylon.backend.dto.routing.DistanceResult routeResult = distanceCalculator.calculateRoute(origin.lat(), origin.lng(), destination.lat(), destination.lng());
+        String polyline = routeResult != null ? routeResult.getEncodedPolyline() : null;
+
+        List<Destination> corridorDest = travelCorridorEngine.filterCandidates(
+                filteredDest,
+                com.exploreceylon.backend.service.corridor.CorridorContext.builder()
+                        .origin(origin)
+                        .destination(destination)
+                        .encodedPolyline(polyline)
+                        .maxDetourKm(maxDetour)
+                        .corridorEnabled(true)
+                        .build()
+        );
+
+        List<Destination> progressedDest = journeyProgressionEngine.orderCandidatesByProgress(
+                corridorDest,
+                com.exploreceylon.backend.service.progression.ProgressionContext.builder()
+                        .origin(origin)
+                        .destination(destination)
+                        .encodedPolyline(polyline)
+                        .minimumForwardDistanceKm(2.0)
+                        .allowBacktracking(false)
+                        .progressionEnabled(true)
+                        .build()
+        );
+
+        List<Destination> rankedDest = destinationRankingEngine.rankDestinations(progressedDest, poolContext);
+
         List<HiddenGem> filteredGems = gemCandidates.stream()
                 .filter(g -> detourKm(origin, destination, g.getLatitude(), g.getLongitude()) <= maxDetour)
                 .filter(g -> !isBeyondDestination(origin, destination, g.getLatitude(), g.getLongitude(), directKm))
@@ -259,9 +314,9 @@ public class ItineraryAssemblyService {
 
         log.info("Corridor pool: {} destinations, {} gems within {}km detour "
                 + "(coarse radius {}km around midpoint)",
-                filteredDest.size(), filteredGems.size(), maxDetour, coarseRadiusKm);
+                rankedDest.size(), filteredGems.size(), maxDetour, coarseRadiusKm);
 
-        return new CandidatePool(filteredDest, filteredGems);
+        return new CandidatePool(rankedDest, filteredGems);
     }
 
     private double detourKm(GeoPoint origin, GeoPoint destination, Double lat, Double lng) {
@@ -329,23 +384,45 @@ public class ItineraryAssemblyService {
         double curLat = origin.lat(), curLng = origin.lng();
 
         while (!remaining.isEmpty() && dayBins.size() < tripDurationDays) {
-            Destination nearest = null;
-            double best = Double.MAX_VALUE;
+            Destination bestCandidate = null;
+            double bestSelectionMetric = -Double.MAX_VALUE;
+            double bestDist = Double.MAX_VALUE;
+
             for (Destination d : remaining) {
+                if (d.getLatitude() == null || d.getLongitude() == null) continue;
                 double dist = GeoUtils.distanceKm(curLat, curLng, d.getLatitude(), d.getLongitude());
-                if (dist < best) { best = dist; nearest = d; }
+
+                RankingContext stepContext = RankingContext.builder()
+                        .origin(origin)
+                        .currentPosition(new GeoPoint(curLat, curLng))
+                        .destination(destination)
+                        .travelStyles(travelStyles)
+                        .budgetLevel(budgetLevel)
+                        .build();
+
+                double rankScore = destinationRankingEngine.calculateScore(d, stepContext);
+                // Balanced selection score: rank score (0-100) minus linear distance penalty
+                double selectionMetric = rankScore - (dist * 0.25);
+
+                if (selectionMetric > bestSelectionMetric) {
+                    bestSelectionMetric = selectionMetric;
+                    bestCandidate = d;
+                    bestDist = dist;
+                }
             }
-            if (nearest == null) break;
-            if (best > MAX_INTER_DAY_JUMP_KM) {
+
+            if (bestCandidate == null) break;
+            if (bestDist > MAX_INTER_DAY_JUMP_KM) {
                 // Too far a jump from wherever we are now — unreachable
                 // without breaking the itinerary regardless of which day
                 // it would land on. Drop it and keep looking.
-                remaining.remove(nearest);
+                remaining.remove(bestCandidate);
                 continue;
             }
 
-            int dur = visitMinutes(nearest);
-            int travel = (int) Math.round(best / AVG_ROAD_SPEED_KMH * 60);
+            int dur = visitMinutes(bestCandidate);
+            com.exploreceylon.backend.dto.routing.DistanceResult routeResult = distanceCalculator.calculateRoute(curLat, curLng, bestCandidate.getLatitude(), bestCandidate.getLongitude());
+            int travel = routeResult != null ? routeResult.getDrivingDurationMinutes() : (int) Math.round(bestDist / AVG_ROAD_SPEED_KMH * 60);
 
             boolean wouldOverflow = !currentBin.isEmpty()
                     && (sightseeingMin + dur > MAX_SIGHTSEEING_MINUTES_PER_DAY
@@ -359,12 +436,12 @@ public class ItineraryAssemblyService {
                 travelMin = 0;
             }
 
-            currentBin.add(nearest);
-            remaining.remove(nearest);
+            currentBin.add(bestCandidate);
+            remaining.remove(bestCandidate);
             sightseeingMin += dur;
             travelMin += travel;
-            curLat = nearest.getLatitude();
-            curLng = nearest.getLongitude();
+            curLat = bestCandidate.getLatitude();
+            curLng = bestCandidate.getLongitude();
         }
         if (!currentBin.isEmpty() && dayBins.size() < tripDurationDays) dayBins.add(currentBin);
         while (dayBins.size() < tripDurationDays) dayBins.add(new ArrayList<>()); // sparse pool → light days

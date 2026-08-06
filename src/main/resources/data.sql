@@ -87,3 +87,45 @@ INSERT INTO locations (name, latitude, longitude) VALUES
     ('Kalutara',      6.5854, 79.9607),
     ('Beruwala',      6.4788, 79.9828)
 ON CONFLICT (name) DO NOTHING;
+
+-- ─────────────────────────────────────────────────────────────
+-- 4. Sample Destination Reviews Seed & Ratings Recalculation
+-- (Only inserts where destination_reviews is empty to preserve existing reviews)
+-- ─────────────────────────────────────────────────────────────
+INSERT INTO destination_reviews (destination_id, traveler_name, rating, comment, created_at)
+SELECT d.id, r.traveler_name, r.rating, r.comment, r.created_at
+FROM destinations d
+CROSS JOIN (VALUES
+    ('Sarah Jenkins', 5, 'Absolute highlight of Sri Lanka! The sunrise view is unforgettable.', NOW() - INTERVAL '12 days'),
+    ('David Miller',  5, 'Breathtaking scenery and rich historical context. Highly recommended!', NOW() - INTERVAL '25 days'),
+    ('Elena Rostova', 4, 'Very impressive cultural site. Wear comfortable shoes as there is a lot of walking.', NOW() - INTERVAL '40 days'),
+    ('Marcus Chen',   5, 'Stunning architecture and serene vibes. Must visit!', NOW() - INTERVAL '60 days'),
+    ('Chloe Dupont',  4, 'Great experience, local guide explained the history wonderfully.', NOW() - INTERVAL '85 days')
+) AS r(traveler_name, rating, comment, created_at)
+WHERE NOT EXISTS (SELECT 1 FROM destination_reviews LIMIT 1);
+
+-- Recalculate rating and review_count on destinations from destination_reviews if reviews exist
+UPDATE destinations d
+SET review_count = sub.cnt,
+    rating = sub.avg_rating
+FROM (
+    SELECT destination_id, COUNT(*) as cnt, ROUND(AVG(rating)::numeric, 1) as avg_rating
+    FROM destination_reviews
+    GROUP BY destination_id
+) sub
+WHERE d.id = sub.destination_id AND (d.review_count IS NULL OR d.review_count = 0);
+
+-- Backfill realistic diverse ratings and review counts for destinations without reviews
+UPDATE destinations
+SET review_count = 50 + (id * 17) % 350,
+    rating = ROUND((4.1 + ((id * 7) % 9) * 0.1)::numeric, 1)
+WHERE (review_count IS NULL OR review_count = 0) AND (rating IS NULL OR rating = 0.0);
+
+-- ─────────────────────────────────────────────────────────────
+-- 5. Hidden Gems Realistic Ratings & Reviews (Lower count, higher rating)
+-- ─────────────────────────────────────────────────────────────
+UPDATE hidden_gems
+SET review_count = 8 + (id * 3) % 25,
+    rating = ROUND((4.5 + ((id * 5) % 5) * 0.1)::numeric, 1)
+WHERE (review_count IS NULL OR review_count = 0) AND (rating IS NULL OR rating = 0.0);
+
