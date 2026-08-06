@@ -24,4 +24,5 @@ public class SelectionContext {
     private GeoPoint destination;
     private String travelStyle;
     private int tripDurationDays;
+    private com.exploreceylon.backend.dto.matrix.RouteMatrix routeMatrix;
 }

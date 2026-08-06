@@ -109,12 +109,17 @@ public class DefaultDestinationSelectionEngine implements DestinationSelectionEn
                     continue; // Category limit reached, skip to promote diversity
                 }
 
-                // Calculate travel from currentPos to candidate
-                DistanceResult travel = distanceCalculator.calculateRoute(
-                        currentPos.lat(), currentPos.lng(),
-                        candidate.getLatitude(), candidate.getLongitude()
-                );
-                int drivingMinutes = travel != null ? (int) Math.round(travel.getDrivingDurationMinutes()) : 15;
+                GeoPoint candidatePos = new GeoPoint(candidate.getLatitude(), candidate.getLongitude());
+                int drivingMinutes;
+                if (context.getRouteMatrix() != null) {
+                    drivingMinutes = (int) Math.round(context.getRouteMatrix().getEntry(currentPos, candidatePos).getDurationMinutes());
+                } else {
+                    DistanceResult travel = distanceCalculator.calculateRoute(
+                            currentPos.lat(), currentPos.lng(),
+                            candidate.getLatitude(), candidate.getLongitude()
+                    );
+                    drivingMinutes = travel != null ? (int) Math.round(travel.getDrivingDurationMinutes()) : 15;
+                }
                 int visitMinutes = visitDurationEstimator.estimateMinutes(candidate.getCategory());
                 int totalRequiredMinutes = drivingMinutes + visitMinutes + walkingBufferMinutes;
 
