@@ -502,8 +502,9 @@ public class ItineraryAssemblyService {
             com.exploreceylon.backend.dto.routing.DistanceResult routeResult = distanceCalculator.calculateRoute(curLat, curLng, bestCandidate.getLatitude(), bestCandidate.getLongitude());
             int travel = routeResult != null ? routeResult.getDrivingDurationMinutes() : (int) Math.round(bestDist / AVG_ROAD_SPEED_KMH * 60);
 
+            int maxStopsForDay = (isInterDistrict && (travelMin + travel > 120)) ? 3 : MAX_STOPS_PER_DAY;
             boolean wouldOverflow = !currentBin.isEmpty()
-                    && (currentBin.size() >= MAX_STOPS_PER_DAY
+                    && (currentBin.size() >= maxStopsForDay
                         || sightseeingMin + dur > MAX_SIGHTSEEING_MINUTES_PER_DAY
                         || travelMin + travel > MAX_TRAVEL_MINUTES_PER_DAY);
 
@@ -526,15 +527,6 @@ public class ItineraryAssemblyService {
         while (dayBins.size() < tripDurationDays) dayBins.add(new ArrayList<>()); // sparse pool → light days
 
         // ── Guarantee the trip actually arrives at its destination ─────
-        // The greedy walk above can legitimately drop the destination
-        // itself if every candidate near it is farther than
-        // MAX_INTER_DAY_JUMP_KM from wherever the walk last stood (e.g. a
-        // style filter thins out the intermediate waypoints, leaving a
-        // gap too wide to cross in one hop). An itinerary that never
-        // reaches the place the user asked to go to is worse than one
-        // that bends the per-day caps slightly on the final day, so if a
-        // real Destination entity near the endpoint exists in the pool
-        // and isn't already included anywhere, force it onto the last day.
         boolean destinationAlreadyIncluded = dayBins.stream().flatMap(List::stream)
                 .anyMatch(d -> GeoUtils.distanceKm(destination.lat(), destination.lng(),
                         d.getLatitude(), d.getLongitude()) <= ENDPOINT_BYPASS_RADIUS_KM);
@@ -546,16 +538,6 @@ public class ItineraryAssemblyService {
                     .ifPresent(d -> dayBins.get(tripDurationDays - 1).add(d));
         }
 
-        // ── Gem placement target (count only) — WHICH gem lands on WHICH
-        // day is now decided inline inside pass 1's per-day loop below,
-        // picking the nearest available gem to that day's actual current
-        // position (capped at MAX_INTER_DAY_JUMP_KM). The old approach
-        // picked the top-N gems by rating first and spread them evenly
-        // across day *indices* with no geography check at all — which
-        // could place a gem near the origin on the trip's last day, long
-        // after the itinerary had already moved on toward the destination
-        // (the same continuity bug fix 2 addresses for destinations,
-        // just surfacing via gems instead).
         int gemTarget = Math.min(targetGemCount(tripDurationDays), pool.gems().size());
         List<HiddenGem> availableGems = new ArrayList<>(pool.gems());
         int gemsPlaced = 0;
@@ -570,10 +552,7 @@ public class ItineraryAssemblyService {
         List<Event> corridorEvents = eventRepository.findEventsBetweenDatesWithinRadius(
                 startDate, endDate, midLat, midLng, coarseRadiusKm);
 
-        // ── Pass 1: build each day's destination/gem stops (no events
-        // yet), tracking a per-day anchor point (last stop's lat/lng, or
-        // the day-start point if the day has no stops) so events can
-        // later be matched to the geographically closest day (fix 5). ──
+        // ── Pass 1: build each day's destination/gem stops ────────────
         List<List<PlannedStop>> stopsByDay = new ArrayList<>();
         List<GeoPoint> anchorByDay = new ArrayList<>();
         List<GeoPoint> dayStartByDay = new ArrayList<>();
@@ -592,7 +571,20 @@ public class ItineraryAssemblyService {
                 double distKm = GeoUtils.distanceKm(lat, lng, d.getLatitude(), d.getLongitude());
                 int travel = (int) Math.round(distKm / AVG_ROAD_SPEED_KMH * 60);
                 elapsed += travel;
-                String slot = slotFor(elapsed);
+                String slot;
+                if (travel >= 60 && !stops.isEmpty()) {
+                    if (elapsed < 240) {
+                        elapsed = Math.max(elapsed, 240); // Advance to Afternoon
+                        slot = "AFTERNOON";
+                    } else if (elapsed < 480) {
+                        elapsed = Math.max(elapsed, 480); // Advance to Evening
+                        slot = "EVENING";
+                    } else {
+                        slot = "EVENING";
+                    }
+                } else {
+                    slot = slotFor(elapsed);
+                }
                 elapsed += visitMinutes(d);
                 stops.add(new PlannedStop(StopType.DESTINATION, d.getId(), d.getName(),
                         d.getDistrict(), d.getLatitude(), d.getLongitude(),
@@ -601,10 +593,6 @@ public class ItineraryAssemblyService {
                 if (region == null) region = d.getDistrict();
             }
 
-            // Pick the nearest still-available gem to this day's current
-            // position, capped at MAX_INTER_DAY_JUMP_KM — never the
-            // highest-rated gem regardless of where it is. Stop once the
-            // trip-wide gem target has been reached.
             if (gemsPlaced < gemTarget) {
                 HiddenGem bestGem = null;
                 double bestGemDist = Double.MAX_VALUE;
@@ -624,7 +612,20 @@ public class ItineraryAssemblyService {
                     gemsPlaced++;
                     int travel = (int) Math.round(bestGemDist / AVG_ROAD_SPEED_KMH * 60);
                     elapsed += travel;
-                    String slot = slotFor(elapsed);
+                    String slot;
+                    if (travel >= 60 && !stops.isEmpty()) {
+                        if (elapsed < 240) {
+                            elapsed = Math.max(elapsed, 240);
+                            slot = "AFTERNOON";
+                        } else if (elapsed < 480) {
+                            elapsed = Math.max(elapsed, 480);
+                            slot = "EVENING";
+                        } else {
+                            slot = "EVENING";
+                        }
+                    } else {
+                        slot = slotFor(elapsed);
+                    }
                     elapsed += visitMinutes(bestGem);
                     stops.add(new PlannedStop(StopType.GEM, bestGem.getId(), bestGem.getTitle(),
                             bestGem.getDistrict(), bestGem.getLatitude(), bestGem.getLongitude(),
