@@ -57,6 +57,8 @@ class PlannerFacadeServiceTest {
         when(assemblyService.geocode("Kandy")).thenReturn(Optional.of(new GeoPoint(7.2906, 80.6337)));
         when(assemblyService.assemble(any(), any(), any(), anyInt(), anyInt(), any(), any()))
                 .thenReturn(List.of(new PlannedDay(1, LocalDate.of(2026, 9, 1), "Colombo", List.of(), 50.0)));
+        when(assemblyService.assemble(any(), any(), any(), anyInt(), anyInt(), any(), any(), org.mockito.ArgumentMatchers.nullable(String.class)))
+                .thenReturn(List.of(new PlannedDay(1, LocalDate.of(2026, 9, 1), "Colombo", List.of(), 50.0)));
     }
 
     @Test

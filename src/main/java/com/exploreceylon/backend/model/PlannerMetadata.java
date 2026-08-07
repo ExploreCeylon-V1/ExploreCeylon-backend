@@ -40,6 +40,14 @@ public class PlannerMetadata {
     @Builder.Default
     private Boolean fallbackUsed = false;
 
+    @Builder.Default
+    private Integer versionNumber = 1;
+
+    @Builder.Default
+    private Integer editCount = 0;
+
+    private LocalDateTime lastRegeneratedAt;
+
     @Column(updatable = false)
     private LocalDateTime createdAt;
 

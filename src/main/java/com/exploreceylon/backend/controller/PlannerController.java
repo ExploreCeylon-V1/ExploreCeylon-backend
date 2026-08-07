@@ -84,6 +84,34 @@ public class PlannerController {
         return ResponseEntity.noContent().build();
     }
 
+    @PostMapping({"/{id}/restore", "/trips/{id}/restore"})
+    public ResponseEntity<PlannerTripSummary> restoreTrip(@PathVariable("id") Long tripId) {
+        User user = getCurrentUser();
+        PlannerTripSummary summary = plannerPersistenceService.restoreTrip(tripId, user);
+        return ResponseEntity.ok(summary);
+    }
+
+    @GetMapping({"/{id}/activity-logs", "/trips/{id}/activity-logs"})
+    public ResponseEntity<List<com.exploreceylon.backend.model.TripActivityLog>> getTripActivityLogs(@PathVariable("id") Long tripId) {
+        User user = getCurrentUser();
+        List<com.exploreceylon.backend.model.TripActivityLog> logs = plannerPersistenceService.getTripActivityLogs(tripId, user);
+        return ResponseEntity.ok(logs);
+    }
+
+    @PostMapping({"/{id}/share/revoke", "/trips/{id}/share/revoke"})
+    public ResponseEntity<PlannerTripSummary> revokeShareToken(@PathVariable("id") Long tripId) {
+        User user = getCurrentUser();
+        PlannerTripSummary summary = plannerPersistenceService.revokeShareToken(tripId, user);
+        return ResponseEntity.ok(summary);
+    }
+
+    @PostMapping({"/{id}/share/regenerate", "/trips/{id}/share/regenerate"})
+    public ResponseEntity<PlannerTripSummary> regenerateShareToken(@PathVariable("id") Long tripId) {
+        User user = getCurrentUser();
+        PlannerTripSummary summary = plannerPersistenceService.regenerateShareToken(tripId, user);
+        return ResponseEntity.ok(summary);
+    }
+
     private User getCurrentUser() {
         String email = SecurityContextHolder.getContext().getAuthentication().getName();
         return userRepository.findByEmail(email)

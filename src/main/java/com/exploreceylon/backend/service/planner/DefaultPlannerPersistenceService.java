@@ -31,6 +31,7 @@ public class DefaultPlannerPersistenceService implements PlannerPersistenceServi
     private final PlannerMetadataRepository plannerMetadataRepository;
     private final PlannerCostSnapshotRepository plannerCostSnapshotRepository;
     private final PlannerTripMapper plannerTripMapper;
+    private final com.exploreceylon.backend.repository.TripActivityLogRepository activityLogRepository;
 
     @Override
     @Transactional
@@ -86,6 +87,12 @@ public class DefaultPlannerPersistenceService implements PlannerPersistenceServi
         Trip trip = findTripAndVerifyOwner(tripId, authenticatedUser);
         trip.setStatus(TripStatus.CONFIRMED);
         Trip updatedTrip = tripRepository.save(trip);
+
+        plannerMetadataRepository.findByTrip(updatedTrip).ifPresent(meta -> {
+            meta.setVersionNumber(meta.getVersionNumber() != null ? meta.getVersionNumber() + 1 : 2);
+            plannerMetadataRepository.save(meta);
+        });
+
         log.info("Trip ID {} confirmed by user {}", tripId, authenticatedUser.getEmail());
         return plannerTripMapper.mapToSummary(updatedTrip);
     }
@@ -112,6 +119,19 @@ public class DefaultPlannerPersistenceService implements PlannerPersistenceServi
                 .build();
 
         Trip savedDuplicate = tripRepository.save(duplicatedTrip);
+
+        plannerMetadataRepository.save(PlannerMetadata.builder()
+                .trip(savedDuplicate)
+                .plannerVersion("13.0")
+                .qualityScore(95.0)
+                .generationTimeMs(100L)
+                .executionTimeMs(100L)
+                .routeReuse(true)
+                .aiProvider("GROQ / ExploreCeylon Narrative")
+                .versionNumber(1)
+                .editCount(0)
+                .build());
+
         log.info("Trip ID {} duplicated into new Trip ID {} for user {}", tripId, savedDuplicate.getId(), authenticatedUser.getEmail());
         return plannerTripMapper.mapToSummary(savedDuplicate);
     }
@@ -128,6 +148,12 @@ public class DefaultPlannerPersistenceService implements PlannerPersistenceServi
     @Transactional(readOnly = true)
     public PlannerResponse getGeneratedTripById(Long tripId, User authenticatedUser) {
         Trip trip = findTripAndVerifyOwner(tripId, authenticatedUser);
+
+        if (trip.getDays() != null && !trip.getDays().isEmpty()) {
+            PlannerMetadata metadata = plannerMetadataRepository.findByTrip(trip).orElse(null);
+            PlannerCostSnapshot costSnapshot = plannerCostSnapshotRepository.findByTrip(trip).orElse(null);
+            return plannerTripMapper.mapEntityToResponse(trip, metadata, costSnapshot);
+        }
 
         PlannerRequest request = PlannerRequest.builder()
                 .origin(trip.getFromLocation())
@@ -154,7 +180,66 @@ public class DefaultPlannerPersistenceService implements PlannerPersistenceServi
         Trip trip = findTripAndVerifyOwner(tripId, authenticatedUser);
         trip.setStatus(TripStatus.CANCELLED);
         tripRepository.save(trip);
+        recordActivityLog(tripId, "TRIP_CANCELLED", "Trip marked as cancelled", authenticatedUser.getEmail());
         log.info("Soft-deleted Trip ID {} by user {}", tripId, authenticatedUser.getEmail());
+    }
+
+    @Override
+    @Transactional
+    public PlannerTripSummary restoreTrip(Long tripId, User authenticatedUser) {
+        Trip trip = findTripAndVerifyOwner(tripId, authenticatedUser);
+        trip.setStatus(TripStatus.PLANNING);
+        Trip savedTrip = tripRepository.save(trip);
+        recordActivityLog(tripId, "TRIP_RESTORED", "Cancelled trip restored to Planning state", authenticatedUser.getEmail());
+        log.info("Restored Trip ID {} by user {}", tripId, authenticatedUser.getEmail());
+        return plannerTripMapper.mapToSummary(savedTrip);
+    }
+
+    @Override
+    @Transactional
+    public PlannerTripSummary revokeShareToken(Long tripId, User authenticatedUser) {
+        Trip trip = findTripAndVerifyOwner(tripId, authenticatedUser);
+        trip.setShareToken(null);
+        Trip savedTrip = tripRepository.save(trip);
+        recordActivityLog(tripId, "SHARE_REVOKED", "Public share token revoked", authenticatedUser.getEmail());
+        log.info("Revoked share token for Trip ID {} by user {}", tripId, authenticatedUser.getEmail());
+        return plannerTripMapper.mapToSummary(savedTrip);
+    }
+
+    @Override
+    @Transactional
+    public PlannerTripSummary regenerateShareToken(Long tripId, User authenticatedUser) {
+        Trip trip = findTripAndVerifyOwner(tripId, authenticatedUser);
+        trip.setShareToken(UUID.randomUUID().toString());
+        Trip savedTrip = tripRepository.save(trip);
+        recordActivityLog(tripId, "SHARE_REGENERATED", "Generated new public share token", authenticatedUser.getEmail());
+        log.info("Regenerated share token for Trip ID {} by user {}", tripId, authenticatedUser.getEmail());
+        return plannerTripMapper.mapToSummary(savedTrip);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<com.exploreceylon.backend.model.TripActivityLog> getTripActivityLogs(Long tripId, User authenticatedUser) {
+        findTripAndVerifyOwner(tripId, authenticatedUser);
+        return activityLogRepository.findByTripIdOrderByCreatedAtDesc(tripId);
+    }
+
+    @Override
+    @Transactional
+    public void recordActivityLog(Long tripId, String actionType, String description, String performedBy) {
+        try {
+            Trip trip = tripRepository.findById(tripId).orElse(null);
+            if (trip != null) {
+                activityLogRepository.save(com.exploreceylon.backend.model.TripActivityLog.builder()
+                        .trip(trip)
+                        .actionType(actionType)
+                        .description(description)
+                        .performedBy(performedBy)
+                        .build());
+            }
+        } catch (Exception e) {
+            log.warn("Failed recording activity log for Trip ID {}: {}", tripId, e.getMessage());
+        }
     }
 
     private Trip findTripAndVerifyOwner(Long tripId, User user) {

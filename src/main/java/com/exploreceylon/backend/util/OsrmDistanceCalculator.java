@@ -29,6 +29,15 @@ public class OsrmDistanceCalculator implements DistanceCalculator {
 
     @Override
     public DistanceResult calculateRoute(double lat1, double lng1, double lat2, double lng2) {
+        if (Math.abs(lat1 - lat2) < 0.0001 && Math.abs(lng1 - lng2) < 0.0001) {
+            return DistanceResult.builder()
+                    .drivingDistanceKm(0.0)
+                    .drivingDurationMinutes(0)
+                    .providerUsed("ZERO_DIST_CACHE")
+                    .success(true)
+                    .build();
+        }
+
         String cacheKey = buildCacheKey(lat1, lng1, lat2, lng2);
 
         if (routeCache.containsKey(cacheKey)) {

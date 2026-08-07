@@ -23,6 +23,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -85,6 +86,7 @@ public class ItineraryAssemblyService {
     // ── Day time-budget tuning ──────────────────────────────
     private static final int MAX_SIGHTSEEING_MINUTES_PER_DAY = 480; // ~8h
     private static final int MAX_TRAVEL_MINUTES_PER_DAY       = 240; // ~3-4h
+    private static final int MAX_STOPS_PER_DAY                = 4;   // Max 4 stops per day for quality, realistic pacing
     private static final double AVG_ROAD_SPEED_KMH            = 40.0; // mountain/coastal roads
 
     // Hard cap on any single stop-to-stop jump in the greedy walk,
@@ -248,10 +250,13 @@ public class ItineraryAssemblyService {
         double coarseRadiusKm = directKm / 2.0 + maxDetour;
 
         String budgetParam = budgetLevel != null ? budgetLevel.name() : "";
-        List<Destination> destCandidates = destinationRepository
-                .findWithinRadius(midLat, midLng, coarseRadiusKm, budgetParam);
-        List<HiddenGem> gemCandidates = hiddenGemRepository
-                .findWithinRadius(midLat, midLng, coarseRadiusKm, budgetParam);
+        CompletableFuture<List<Destination>> destFuture = java.util.concurrent.CompletableFuture.supplyAsync(
+                () -> destinationRepository.findWithinRadius(midLat, midLng, coarseRadiusKm, budgetParam));
+        CompletableFuture<List<HiddenGem>> gemFuture = java.util.concurrent.CompletableFuture.supplyAsync(
+                () -> hiddenGemRepository.findWithinRadius(midLat, midLng, coarseRadiusKm, budgetParam));
+
+        List<Destination> destCandidates = destFuture.join();
+        List<HiddenGem> gemCandidates = gemFuture.join();
 
         Set<String> selectedStyles = travelStyles == null ? Set.of() : travelStyles.stream()
                 .filter(s -> s != null && !s.isBlank())
@@ -331,6 +336,21 @@ public class ItineraryAssemblyService {
     // the origin→destination corridor direction (e.g. Horton Plains
     // sitting past Kandy on a Colombo→Kandy trip) — detourKm alone only
     // measures off-route distance, not overshoot along the route.
+    private String resolveDistrictAtPoint(GeoPoint point, List<Destination> allDestinations) {
+        if (point == null || allDestinations == null || allDestinations.isEmpty()) return null;
+        Destination nearest = null;
+        double minDistance = Double.MAX_VALUE;
+        for (Destination d : allDestinations) {
+            if (d.getLatitude() == null || d.getLongitude() == null || d.getDistrict() == null) continue;
+            double dist = GeoUtils.distanceKm(point.lat(), point.lng(), d.getLatitude(), d.getLongitude());
+            if (dist < minDistance) {
+                minDistance = dist;
+                nearest = d;
+            }
+        }
+        return (nearest != null && minDistance <= 40.0) ? nearest.getDistrict() : null;
+    }
+
     private boolean isBeyondDestination(GeoPoint origin, GeoPoint destination,
                                          Double lat, Double lng, double directKm) {
         if (lat == null || lng == null) return true;
@@ -363,6 +383,13 @@ public class ItineraryAssemblyService {
             GeoPoint origin, GeoPoint destination, LocalDate startDate,
             int tripDurationDays, int groupSize, BudgetLevel budgetLevel,
             List<String> travelStyles) {
+        return assemble(origin, destination, startDate, tripDurationDays, groupSize, budgetLevel, travelStyles, null);
+    }
+
+    public List<PlannedDay> assemble(
+            GeoPoint origin, GeoPoint destination, LocalDate startDate,
+            int tripDurationDays, int groupSize, BudgetLevel budgetLevel,
+            List<String> travelStyles, String specialNotes) {
 
         CandidatePool pool = buildCandidatePool(
                 origin, destination, tripDurationDays, budgetLevel, travelStyles,
@@ -383,26 +410,121 @@ public class ItineraryAssemblyService {
         int travelMin = 0;
         double curLat = origin.lat(), curLng = origin.lng();
 
+        double totalCorridorDist = GeoUtils.distanceKm(origin.lat(), origin.lng(), destination.lat(), destination.lng());
+        com.exploreceylon.backend.service.progression.ProgressionContext progContext =
+                com.exploreceylon.backend.service.progression.ProgressionContext.builder()
+                        .origin(origin)
+                        .destination(destination)
+                        .build();
+
+        String originDistrict = resolveDistrictAtPoint(origin, pool.destinations());
+        String destinationDistrict = resolveDistrictAtPoint(destination, pool.destinations());
+
+        boolean isInterDistrict = totalCorridorDist > 25.0
+                && (originDistrict == null || destinationDistrict == null || !originDistrict.equalsIgnoreCase(destinationDistrict));
+        int originDistrictStopsInTrip = 0;
+
+        // Pre-compute candidate static attributes ONCE to eliminate inner-loop recalculations
+        Map<Long, Double> progressKmMap = new java.util.HashMap<>();
+        Map<Long, Double> staticRankMap = new java.util.HashMap<>();
+        Map<Long, Double> detourKmMap = new java.util.HashMap<>();
+
+        RankingContext baseRankContext = RankingContext.builder()
+                .origin(origin)
+                .destination(destination)
+                .travelStyles(travelStyles)
+                .budgetLevel(budgetLevel)
+                .build();
+
+        for (Destination d : pool.destinations()) {
+            if (d.getId() == null || d.getLatitude() == null || d.getLongitude() == null) continue;
+            progressKmMap.put(d.getId(), journeyProgressionEngine.calculateProgress(d, progContext).getProgressDistanceKm());
+            staticRankMap.put(d.getId(), destinationRankingEngine.calculateScore(d, baseRankContext));
+            detourKmMap.put(d.getId(), detourKm(origin, destination, d.getLatitude(), d.getLongitude()));
+        }
+
         while (!remaining.isEmpty() && dayBins.size() < tripDurationDays) {
             Destination bestCandidate = null;
             double bestSelectionMetric = -Double.MAX_VALUE;
             double bestDist = Double.MAX_VALUE;
 
+            int currentDayNum = dayBins.size() + 1;
+            double targetMinProgressRatio = (double) (currentDayNum - 1) / tripDurationDays - 0.10;
+            double targetMaxProgressRatio = (double) currentDayNum / tripDurationDays + 0.15;
+            if (currentDayNum == 1) {
+                targetMinProgressRatio = 0.0;
+                targetMaxProgressRatio = Math.max(0.35, 1.0 / tripDurationDays + 0.10);
+            } else if (currentDayNum == tripDurationDays) {
+                targetMinProgressRatio = Math.min(0.60, (double) (tripDurationDays - 1) / tripDurationDays - 0.10);
+                targetMaxProgressRatio = 1.0;
+            }
+
+            double currentPosProgressKm = journeyProgressionEngine.calculateProgress(
+                    Destination.builder().latitude(curLat).longitude(curLng).build(), progContext
+            ).getProgressDistanceKm();
+
             for (Destination d : remaining) {
                 if (d.getLatitude() == null || d.getLongitude() == null) continue;
+                String candDistrict = d.getDistrict();
+
+                // Inter-District Scenario: Strictly exclude origin district on Day 2+ or once origin stop cap (1) reached
+                if (isInterDistrict && originDistrict != null && candDistrict != null && candDistrict.equalsIgnoreCase(originDistrict)) {
+                    if (currentDayNum > 1 || originDistrictStopsInTrip >= 1) {
+                        continue;
+                    }
+                }
+
                 double dist = GeoUtils.distanceKm(curLat, curLng, d.getLatitude(), d.getLongitude());
 
-                RankingContext stepContext = RankingContext.builder()
-                        .origin(origin)
-                        .currentPosition(new GeoPoint(curLat, curLng))
-                        .destination(destination)
-                        .travelStyles(travelStyles)
-                        .budgetLevel(budgetLevel)
-                        .build();
+                double rankScore = staticRankMap.getOrDefault(d.getId(), 50.0);
+                double proxDecay = Math.exp(-dist / 50.0) * 10.0;
+                rankScore += proxDecay;
 
-                double rankScore = destinationRankingEngine.calculateScore(d, stepContext);
-                // Balanced selection score: rank score (0-100) minus linear distance penalty
-                double selectionMetric = rankScore - (dist * 0.25);
+                // User Edit / Special Notes Keyword Boosting
+                double promptBonus = 0.0;
+                if (specialNotes != null && !specialNotes.isBlank()) {
+                    String notesLower = specialNotes.toLowerCase(Locale.ROOT);
+                    String nameLower = d.getName() != null ? d.getName().toLowerCase(Locale.ROOT) : "";
+                    String districtLower = d.getDistrict() != null ? d.getDistrict().toLowerCase(Locale.ROOT) : "";
+
+                    boolean isRemove = notesLower.contains("remove") || notesLower.contains("delete") || notesLower.contains("exclude");
+                    for (String word : notesLower.split("[^a-zA-Z0-9]+")) {
+                        if (word.length() >= 4 && (nameLower.contains(word) || districtLower.contains(word))) {
+                            if (isRemove) {
+                                promptBonus -= 500.0;
+                            } else {
+                                promptBonus += 300.0;
+                            }
+                        }
+                    }
+                }
+                rankScore += promptBonus;
+
+                // Forward corridor progression scoring using pre-computed progress distance
+                double candidateProgressKm = progressKmMap.getOrDefault(d.getId(), 0.0);
+                double progressRatio = totalCorridorDist > 1.0 ? Math.min(1.0, candidateProgressKm / totalCorridorDist) : 0.0;
+                double currentPosRatio = totalCorridorDist > 1.0 ? Math.min(1.0, currentPosProgressKm / totalCorridorDist) : 0.0;
+
+                double progressionBonus = 0.0;
+                if (isInterDistrict) {
+                    if (progressRatio < currentPosRatio - 0.08) {
+                        progressionBonus -= 60.0; // heavy penalty for backtracking
+                    } else if (progressRatio >= targetMinProgressRatio && progressRatio <= targetMaxProgressRatio) {
+                        progressionBonus += 40.0 + (progressRatio - currentPosRatio) * 30.0; // strong boost for matching day's corridor window
+                    } else if (progressRatio < targetMinProgressRatio) {
+                        progressionBonus -= 50.0; // penalty for staying behind day's corridor progress
+                    } else if (progressRatio > targetMaxProgressRatio && currentDayNum < tripDurationDays) {
+                        progressionBonus -= 30.0; // hold far-ahead stops for later days
+                    }
+
+                    // Strong boost for target destination district on final day
+                    if (currentDayNum == tripDurationDays && destinationDistrict != null && candDistrict != null && candDistrict.equalsIgnoreCase(destinationDistrict)) {
+                        progressionBonus += 80.0;
+                    }
+                }
+
+                double offCorridorDetour = detourKmMap.getOrDefault(d.getId(), 0.0);
+                double selectionMetric = rankScore + progressionBonus - (offCorridorDetour * 2.0);
 
                 if (selectionMetric > bestSelectionMetric) {
                     bestSelectionMetric = selectionMetric;
@@ -412,10 +534,10 @@ public class ItineraryAssemblyService {
             }
 
             if (bestCandidate == null) break;
+            if (bestCandidate.getDistrict() != null && originDistrict != null && bestCandidate.getDistrict().equalsIgnoreCase(originDistrict)) {
+                originDistrictStopsInTrip++;
+            }
             if (bestDist > MAX_INTER_DAY_JUMP_KM) {
-                // Too far a jump from wherever we are now — unreachable
-                // without breaking the itinerary regardless of which day
-                // it would land on. Drop it and keep looking.
                 remaining.remove(bestCandidate);
                 continue;
             }
@@ -424,8 +546,10 @@ public class ItineraryAssemblyService {
             com.exploreceylon.backend.dto.routing.DistanceResult routeResult = distanceCalculator.calculateRoute(curLat, curLng, bestCandidate.getLatitude(), bestCandidate.getLongitude());
             int travel = routeResult != null ? routeResult.getDrivingDurationMinutes() : (int) Math.round(bestDist / AVG_ROAD_SPEED_KMH * 60);
 
+            int maxStopsForDay = (isInterDistrict && (travelMin + travel > 120)) ? 3 : MAX_STOPS_PER_DAY;
             boolean wouldOverflow = !currentBin.isEmpty()
-                    && (sightseeingMin + dur > MAX_SIGHTSEEING_MINUTES_PER_DAY
+                    && (currentBin.size() >= maxStopsForDay
+                        || sightseeingMin + dur > MAX_SIGHTSEEING_MINUTES_PER_DAY
                         || travelMin + travel > MAX_TRAVEL_MINUTES_PER_DAY);
 
             if (wouldOverflow) {
@@ -447,15 +571,6 @@ public class ItineraryAssemblyService {
         while (dayBins.size() < tripDurationDays) dayBins.add(new ArrayList<>()); // sparse pool → light days
 
         // ── Guarantee the trip actually arrives at its destination ─────
-        // The greedy walk above can legitimately drop the destination
-        // itself if every candidate near it is farther than
-        // MAX_INTER_DAY_JUMP_KM from wherever the walk last stood (e.g. a
-        // style filter thins out the intermediate waypoints, leaving a
-        // gap too wide to cross in one hop). An itinerary that never
-        // reaches the place the user asked to go to is worse than one
-        // that bends the per-day caps slightly on the final day, so if a
-        // real Destination entity near the endpoint exists in the pool
-        // and isn't already included anywhere, force it onto the last day.
         boolean destinationAlreadyIncluded = dayBins.stream().flatMap(List::stream)
                 .anyMatch(d -> GeoUtils.distanceKm(destination.lat(), destination.lng(),
                         d.getLatitude(), d.getLongitude()) <= ENDPOINT_BYPASS_RADIUS_KM);
@@ -467,16 +582,6 @@ public class ItineraryAssemblyService {
                     .ifPresent(d -> dayBins.get(tripDurationDays - 1).add(d));
         }
 
-        // ── Gem placement target (count only) — WHICH gem lands on WHICH
-        // day is now decided inline inside pass 1's per-day loop below,
-        // picking the nearest available gem to that day's actual current
-        // position (capped at MAX_INTER_DAY_JUMP_KM). The old approach
-        // picked the top-N gems by rating first and spread them evenly
-        // across day *indices* with no geography check at all — which
-        // could place a gem near the origin on the trip's last day, long
-        // after the itinerary had already moved on toward the destination
-        // (the same continuity bug fix 2 addresses for destinations,
-        // just surfacing via gems instead).
         int gemTarget = Math.min(targetGemCount(tripDurationDays), pool.gems().size());
         List<HiddenGem> availableGems = new ArrayList<>(pool.gems());
         int gemsPlaced = 0;
@@ -491,10 +596,7 @@ public class ItineraryAssemblyService {
         List<Event> corridorEvents = eventRepository.findEventsBetweenDatesWithinRadius(
                 startDate, endDate, midLat, midLng, coarseRadiusKm);
 
-        // ── Pass 1: build each day's destination/gem stops (no events
-        // yet), tracking a per-day anchor point (last stop's lat/lng, or
-        // the day-start point if the day has no stops) so events can
-        // later be matched to the geographically closest day (fix 5). ──
+        // ── Pass 1: build each day's destination/gem stops ────────────
         List<List<PlannedStop>> stopsByDay = new ArrayList<>();
         List<GeoPoint> anchorByDay = new ArrayList<>();
         List<GeoPoint> dayStartByDay = new ArrayList<>();
@@ -513,7 +615,20 @@ public class ItineraryAssemblyService {
                 double distKm = GeoUtils.distanceKm(lat, lng, d.getLatitude(), d.getLongitude());
                 int travel = (int) Math.round(distKm / AVG_ROAD_SPEED_KMH * 60);
                 elapsed += travel;
-                String slot = slotFor(elapsed);
+                String slot;
+                if (travel >= 60 && !stops.isEmpty()) {
+                    if (elapsed < 240) {
+                        elapsed = Math.max(elapsed, 240); // Advance to Afternoon
+                        slot = "AFTERNOON";
+                    } else if (elapsed < 480) {
+                        elapsed = Math.max(elapsed, 480); // Advance to Evening
+                        slot = "EVENING";
+                    } else {
+                        slot = "EVENING";
+                    }
+                } else {
+                    slot = slotFor(elapsed);
+                }
                 elapsed += visitMinutes(d);
                 stops.add(new PlannedStop(StopType.DESTINATION, d.getId(), d.getName(),
                         d.getDistrict(), d.getLatitude(), d.getLongitude(),
@@ -522,15 +637,14 @@ public class ItineraryAssemblyService {
                 if (region == null) region = d.getDistrict();
             }
 
-            // Pick the nearest still-available gem to this day's current
-            // position, capped at MAX_INTER_DAY_JUMP_KM — never the
-            // highest-rated gem regardless of where it is. Stop once the
-            // trip-wide gem target has been reached.
             if (gemsPlaced < gemTarget) {
                 HiddenGem bestGem = null;
                 double bestGemDist = Double.MAX_VALUE;
                 for (HiddenGem g : availableGems) {
                     if (g.getLatitude() == null || g.getLongitude() == null) continue;
+                    if (isInterDistrict && originDistrict != null && g.getDistrict() != null && g.getDistrict().equalsIgnoreCase(originDistrict)) {
+                        if (dayIdx > 0 || originDistrictStopsInTrip >= 1) continue;
+                    }
                     double dist = GeoUtils.distanceKm(lat, lng, g.getLatitude(), g.getLongitude());
                     if (dist <= MAX_INTER_DAY_JUMP_KM && dist < bestGemDist) {
                         bestGemDist = dist;
@@ -542,7 +656,20 @@ public class ItineraryAssemblyService {
                     gemsPlaced++;
                     int travel = (int) Math.round(bestGemDist / AVG_ROAD_SPEED_KMH * 60);
                     elapsed += travel;
-                    String slot = slotFor(elapsed);
+                    String slot;
+                    if (travel >= 60 && !stops.isEmpty()) {
+                        if (elapsed < 240) {
+                            elapsed = Math.max(elapsed, 240);
+                            slot = "AFTERNOON";
+                        } else if (elapsed < 480) {
+                            elapsed = Math.max(elapsed, 480);
+                            slot = "EVENING";
+                        } else {
+                            slot = "EVENING";
+                        }
+                    } else {
+                        slot = slotFor(elapsed);
+                    }
                     elapsed += visitMinutes(bestGem);
                     stops.add(new PlannedStop(StopType.GEM, bestGem.getId(), bestGem.getTitle(),
                             bestGem.getDistrict(), bestGem.getLatitude(), bestGem.getLongitude(),

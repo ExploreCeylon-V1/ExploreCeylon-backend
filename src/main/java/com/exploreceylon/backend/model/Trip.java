@@ -77,6 +77,22 @@ public class Trip {
               orphanRemoval = true)
     private TripPreference preference;
 
+    @OneToOne(mappedBy = "trip",
+              cascade = CascadeType.ALL,
+              orphanRemoval = true)
+    private PlannerMetadata plannerMetadata;
+
+    @OneToOne(mappedBy = "trip",
+              cascade = CascadeType.ALL,
+              orphanRemoval = true)
+    private PlannerCostSnapshot plannerCostSnapshot;
+
+    @OneToMany(mappedBy = "trip",
+               cascade = CascadeType.ALL,
+               orphanRemoval = true)
+    @Builder.Default
+    private List<TripActivityLog> activityLogs = new ArrayList<>();
+
     @Column(updatable = false)
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
@@ -106,6 +122,6 @@ public class Trip {
     }
 
     public enum TripStatus {
-        DRAFT, GENERATED, CONFIRMED, STARTED, COMPLETED, CANCELLED, PLANNING, ACTIVE, ARCHIVED
+        DRAFT, GENERATED, PLANNING, CONFIRMED, STARTED, ACTIVE, COMPLETED, CANCELLED, ARCHIVED
     }
 }

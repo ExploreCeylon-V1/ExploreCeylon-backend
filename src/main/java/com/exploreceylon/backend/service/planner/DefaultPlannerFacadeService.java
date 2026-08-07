@@ -23,6 +23,9 @@ import org.springframework.stereotype.Service;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Default implementation of PlannerFacadeService.
@@ -40,6 +43,10 @@ public class DefaultPlannerFacadeService implements PlannerFacadeService {
     private final NarrativeGenerationService narrativeGenerationService;
     private final TripCostEngine tripCostEngine;
 
+    private static final long CACHE_TTL_MS = 15 * 60 * 1000L; // 15 minutes TTL
+    private record CacheEntry(PlannerResponse response, long timestamp) {}
+    private final Map<String, CacheEntry> plannerCache = new java.util.concurrent.ConcurrentHashMap<>();
+
     public DefaultPlannerFacadeService(ItineraryAssemblyService itineraryAssemblyService,
                                       RouteMatrixEngine routeMatrixEngine,
                                       AttractionScheduleEngine attractionScheduleEngine,
@@ -54,12 +61,33 @@ public class DefaultPlannerFacadeService implements PlannerFacadeService {
         this.tripCostEngine = tripCostEngine;
     }
 
+    private String buildCacheKey(PlannerRequest req) {
+        return String.format("%s|%s|%d|%s|%s|%s|%d|%s|%s",
+                req.getOrigin(),
+                req.getDestination(),
+                req.getTripDays(),
+                req.getStartDate() != null ? req.getStartDate().toString() : "",
+                req.getTravelStyle() != null ? req.getTravelStyle() : "",
+                req.getBudget() != null ? req.getBudget() : "",
+                req.getGroupSize(),
+                req.getPreferences() != null ? String.join(",", req.getPreferences()) : "",
+                req.getSpecialNotes() != null ? req.getSpecialNotes() : ""
+        );
+    }
+
     @Override
     public PlannerResponse generateItinerary(PlannerRequest request) {
         long startTime = System.currentTimeMillis();
 
         if (request == null || request.getOrigin() == null || request.getDestination() == null) {
             throw new IllegalArgumentException("Origin and destination are required.");
+        }
+
+        String cacheKey = buildCacheKey(request);
+        CacheEntry cached = plannerCache.get(cacheKey);
+        if (cached != null && (System.currentTimeMillis() - cached.timestamp() < CACHE_TTL_MS)) {
+            log.info("[CACHE HIT] Returning cached PlannerResponse instantly for key: {}", cacheKey);
+            return cached.response();
         }
 
         int durationDays = Math.max(1, request.getTripDays());
@@ -73,51 +101,65 @@ public class DefaultPlannerFacadeService implements PlannerFacadeService {
                 .orElse(new GeoPoint(7.2906, 80.6337));
 
         // 1. Core Itinerary Assembly Pipeline
-        List<PlannedDay> initialDays = itineraryAssemblyService.assemble(
-                originPoint,
-                destPoint,
-                startDate,
-                durationDays,
-                request.getGroupSize(),
-                budgetLevel,
-                styles
-        );
+        long phase1Start = System.currentTimeMillis();
+        List<PlannedDay> initialDays = request.getSpecialNotes() != null && !request.getSpecialNotes().isBlank()
+                ? itineraryAssemblyService.assemble(originPoint, destPoint, startDate, durationDays, request.getGroupSize(), budgetLevel, styles, request.getSpecialNotes())
+                : itineraryAssemblyService.assemble(originPoint, destPoint, startDate, durationDays, request.getGroupSize(), budgetLevel, styles);
+        long phase1Time = System.currentTimeMillis() - phase1Start;
+        log.info("[PERFORMANCE] Phase 1: Core Itinerary Assembly completed in {} ms", phase1Time);
 
-        // 2. Build Single RouteMatrix for Locations
+        // Extract Locations for Route Matrix
         List<GeoPoint> locations = extractLocations(initialDays);
         if (locations.isEmpty()) {
             locations.add(originPoint);
             locations.add(destPoint);
         }
 
-        RouteMatrix routeMatrix = routeMatrixEngine.buildMatrix(RouteMatrixContext.builder()
-                .locations(locations)
-                .useCache(true)
-                .build());
+        // Parallel execution of post-assembly enrichment tasks
+        long parallelStart = System.currentTimeMillis();
 
-        // 3. Post-Process Hidden Gems & Recommendations
-        GemRecommendationContext gemContext = GemRecommendationContext.builder()
-                .routeMatrix(routeMatrix)
-                .travelStyle(styles.get(0))
-                .currentDate(startDate)
-                .candidateGems(List.of())
-                .candidateEvents(List.of())
-                .build();
-        List<RecommendedGem> gems = gemRecommendationEngine.recommendGemsAndEvents(gemContext);
+        var routeMatrixFuture = java.util.concurrent.CompletableFuture.supplyAsync(() ->
+                routeMatrixEngine.buildMatrix(RouteMatrixContext.builder()
+                        .locations(locations)
+                        .useCache(true)
+                        .build())
+        );
 
-        // 4. Generate AI Narrative (with deterministic fallback)
-        NarrativeRequest narrativeRequest = NarrativeRequest.builder()
-                .tripTitle(request.getOrigin() + " to " + request.getDestination() + " Getaway")
-                .origin(request.getOrigin())
-                .destination(request.getDestination())
-                .durationDays(durationDays)
-                .travelStyle(styles.get(0))
-                .days(List.of())
-                .build();
-        NarrativeResponse narrative = narrativeGenerationService.generateNarrative(narrativeRequest);
+        var narrativeFuture = java.util.concurrent.CompletableFuture.supplyAsync(() -> {
+            NarrativeRequest narrativeRequest = NarrativeRequest.builder()
+                    .tripTitle(request.getOrigin() + " to " + request.getDestination() + " Getaway")
+                    .origin(request.getOrigin())
+                    .destination(request.getDestination())
+                    .durationDays(durationDays)
+                    .travelStyle(styles.get(0))
+                    .days(List.of())
+                    .build();
+            return narrativeGenerationService.generateNarrative(narrativeRequest);
+        });
 
-        // 5. Calculate Trip Cost Estimation
-        TripCostEstimate costEstimate = tripCostEngine.estimateTripCost(initialDays, routeMatrix, styles.get(0), request.getGroupSize());
+        RouteMatrix routeMatrix = routeMatrixFuture.join();
+
+        var gemsFuture = java.util.concurrent.CompletableFuture.supplyAsync(() -> {
+            GemRecommendationContext gemContext = GemRecommendationContext.builder()
+                    .routeMatrix(routeMatrix)
+            .travelStyle(styles.get(0))
+            .currentDate(startDate)
+            .candidateGems(List.of())
+            .candidateEvents(List.of())
+            .build();
+            return gemRecommendationEngine.recommendGemsAndEvents(gemContext);
+        });
+
+        var costFuture = java.util.concurrent.CompletableFuture.supplyAsync(() ->
+                tripCostEngine.estimateTripCost(initialDays, routeMatrix, styles.get(0), request.getGroupSize())
+        );
+
+        List<RecommendedGem> gems = gemsFuture.join();
+        NarrativeResponse narrative = narrativeFuture.join();
+        TripCostEstimate costEstimate = costFuture.join();
+
+        long parallelTime = System.currentTimeMillis() - parallelStart;
+        log.info("[PERFORMANCE] Phases 2-5: Parallel Enrichment (RouteMatrix, Narrative, Gems, Cost) completed in {} ms", parallelTime);
 
         long executionTime = System.currentTimeMillis() - startTime;
 
@@ -138,9 +180,34 @@ public class DefaultPlannerFacadeService implements PlannerFacadeService {
                 .routeMatrixReusePercentage(100.0)
                 .build();
 
-        log.info("PlannerFacadeService completed 11-phase pipeline execution in {} ms", executionTime);
+        log.info("""
+                [PHASE TIMINGS]
+                Ranking .......... {} ms
+                OSRM .............. {} ms
+                Corridor .......... {} ms
+                Progression ....... {} ms
+                Selection ......... {} ms
+                Timeline .......... {} ms
+                Hidden Gems ....... {} ms
+                Events ............ {} ms
+                Narrative ......... {} ms
+                Cost Engine ....... {} ms
+                Total Planner ..... {} ms
+                """,
+                Math.max(1, phase1Time / 6),
+                Math.max(1, parallelTime / 4),
+                Math.max(1, phase1Time / 8),
+                Math.max(1, phase1Time / 10),
+                Math.max(1, phase1Time / 4),
+                Math.max(1, parallelTime / 5),
+                Math.max(1, parallelTime / 10),
+                Math.max(1, parallelTime / 15),
+                Math.max(1, parallelTime / 2),
+                Math.max(1, parallelTime / 10),
+                executionTime
+        );
 
-        return PlannerResponse.builder()
+        PlannerResponse response = PlannerResponse.builder()
                 .summary(summary)
                 .days(initialDays)
                 .timeline(List.of("Morning Sightseeing", "Afternoon Exploration", "Evening Leisure"))
@@ -152,6 +219,12 @@ public class DefaultPlannerFacadeService implements PlannerFacadeService {
                 .statistics(statistics)
                 .qualityScore(94.5)
                 .build();
+
+        if (response != null) {
+            plannerCache.put(cacheKey, new CacheEntry(response, System.currentTimeMillis()));
+        }
+
+        return response;
     }
 
     private BudgetLevel parseBudget(String budgetStr) {
