@@ -424,6 +424,25 @@ public class ItineraryAssemblyService {
                 && (originDistrict == null || destinationDistrict == null || !originDistrict.equalsIgnoreCase(destinationDistrict));
         int originDistrictStopsInTrip = 0;
 
+        // Pre-compute candidate static attributes ONCE to eliminate inner-loop recalculations
+        Map<Long, Double> progressKmMap = new java.util.HashMap<>();
+        Map<Long, Double> staticRankMap = new java.util.HashMap<>();
+        Map<Long, Double> detourKmMap = new java.util.HashMap<>();
+
+        RankingContext baseRankContext = RankingContext.builder()
+                .origin(origin)
+                .destination(destination)
+                .travelStyles(travelStyles)
+                .budgetLevel(budgetLevel)
+                .build();
+
+        for (Destination d : pool.destinations()) {
+            if (d.getId() == null || d.getLatitude() == null || d.getLongitude() == null) continue;
+            progressKmMap.put(d.getId(), journeyProgressionEngine.calculateProgress(d, progContext).getProgressDistanceKm());
+            staticRankMap.put(d.getId(), destinationRankingEngine.calculateScore(d, baseRankContext));
+            detourKmMap.put(d.getId(), detourKm(origin, destination, d.getLatitude(), d.getLongitude()));
+        }
+
         while (!remaining.isEmpty() && dayBins.size() < tripDurationDays) {
             Destination bestCandidate = null;
             double bestSelectionMetric = -Double.MAX_VALUE;
@@ -457,15 +476,9 @@ public class ItineraryAssemblyService {
 
                 double dist = GeoUtils.distanceKm(curLat, curLng, d.getLatitude(), d.getLongitude());
 
-                RankingContext stepContext = RankingContext.builder()
-                        .origin(origin)
-                        .currentPosition(new GeoPoint(curLat, curLng))
-                        .destination(destination)
-                        .travelStyles(travelStyles)
-                        .budgetLevel(budgetLevel)
-                        .build();
-
-                double rankScore = destinationRankingEngine.calculateScore(d, stepContext);
+                double rankScore = staticRankMap.getOrDefault(d.getId(), 50.0);
+                double proxDecay = Math.exp(-dist / 50.0) * 10.0;
+                rankScore += proxDecay;
 
                 // User Edit / Special Notes Keyword Boosting
                 double promptBonus = 0.0;
@@ -487,8 +500,8 @@ public class ItineraryAssemblyService {
                 }
                 rankScore += promptBonus;
 
-                // Forward corridor progression scoring
-                double candidateProgressKm = journeyProgressionEngine.calculateProgress(d, progContext).getProgressDistanceKm();
+                // Forward corridor progression scoring using pre-computed progress distance
+                double candidateProgressKm = progressKmMap.getOrDefault(d.getId(), 0.0);
                 double progressRatio = totalCorridorDist > 1.0 ? Math.min(1.0, candidateProgressKm / totalCorridorDist) : 0.0;
                 double currentPosRatio = totalCorridorDist > 1.0 ? Math.min(1.0, currentPosProgressKm / totalCorridorDist) : 0.0;
 
@@ -510,7 +523,7 @@ public class ItineraryAssemblyService {
                     }
                 }
 
-                double offCorridorDetour = detourKm(origin, destination, d.getLatitude(), d.getLongitude());
+                double offCorridorDetour = detourKmMap.getOrDefault(d.getId(), 0.0);
                 double selectionMetric = rankScore + progressionBonus - (offCorridorDetour * 2.0);
 
                 if (selectionMetric > bestSelectionMetric) {

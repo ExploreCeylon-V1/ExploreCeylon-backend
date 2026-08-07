@@ -51,14 +51,16 @@ public class DefaultTravelCorridorEngine implements TravelCorridorEngine {
         double widthKm = (context != null && context.getWidthKm() > 0.0) ? context.getWidthKm() : defaultWidthKm;
         double maxDetourKm = (context != null && context.getMaxDetourKm() > 0.0) ? context.getMaxDetourKm() : defaultMaxDetourKm;
 
-        List<GeoPoint> routePath = extractRoutePath(context);
-        if (routePath.isEmpty()) {
+        List<GeoPoint> fullRoutePath = extractRoutePath(context);
+        if (fullRoutePath.isEmpty()) {
             log.warn("No route polyline path available for corridor filtering. Returning candidates unmodified.");
             return candidates;
         }
 
-        GeoPoint origin = routePath.get(0);
-        GeoPoint destination = routePath.get(routePath.size() - 1);
+        List<GeoPoint> routePath = downsampleRoutePath(fullRoutePath);
+
+        GeoPoint origin = fullRoutePath.get(0);
+        GeoPoint destination = fullRoutePath.get(fullRoutePath.size() - 1);
         double directDistance = distanceCalculator.calculateDistanceKm(origin.lat(), origin.lng(), destination.lat(), destination.lng());
 
         // Bounding box with margin for rapid pre-filtering
@@ -91,6 +93,20 @@ public class DefaultTravelCorridorEngine implements TravelCorridorEngine {
                 candidates.size(), corridorCandidates.size(), widthKm, maxDetourKm);
 
         return corridorCandidates;
+    }
+
+    private List<GeoPoint> downsampleRoutePath(List<GeoPoint> originalPath) {
+        if (originalPath == null || originalPath.size() <= 80) {
+            return originalPath != null ? originalPath : List.of();
+        }
+        int step = Math.max(1, originalPath.size() / 80);
+        List<GeoPoint> sampled = new ArrayList<>();
+        sampled.add(originalPath.get(0));
+        for (int i = step; i < originalPath.size() - 1; i += step) {
+            sampled.add(originalPath.get(i));
+        }
+        sampled.add(originalPath.get(originalPath.size() - 1));
+        return sampled;
     }
 
     private List<GeoPoint> extractRoutePath(CorridorContext context) {

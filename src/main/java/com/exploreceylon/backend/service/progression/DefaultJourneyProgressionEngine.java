@@ -50,17 +50,60 @@ public class DefaultJourneyProgressionEngine implements JourneyProgressionEngine
             return candidates;
         }
 
+        List<GeoPoint> routePath = extractRoutePath(context);
+        if (routePath.size() < 2) {
+            return candidates;
+        }
+
+        double[] cumulativeDist = computeCumulativeDistances(routePath);
+
+        record CandidateWithProgress(Destination destination, double progressKm) {}
+
         return candidates.stream()
-                .sorted((d1, d2) -> {
-                    JourneyProgress p1 = calculateProgress(d1, context);
-                    JourneyProgress p2 = calculateProgress(d2, context);
-                    return Double.compare(p1.getProgressDistanceKm(), p2.getProgressDistanceKm());
-                })
+                .map(d -> new CandidateWithProgress(d, calculateProgressInternal(d, routePath, cumulativeDist, context).getProgressDistanceKm()))
+                .sorted((c1, c2) -> Double.compare(c1.progressKm(), c2.progressKm()))
+                .map(CandidateWithProgress::destination)
                 .collect(Collectors.toList());
     }
 
     @Override
     public JourneyProgress calculateProgress(Destination destination, ProgressionContext context) {
+        List<GeoPoint> routePath = extractRoutePath(context);
+        if (routePath.size() < 2) {
+            return calculateLinearFallback(destination, context);
+        }
+        double[] cumulativeDist = computeCumulativeDistances(routePath);
+        return calculateProgressInternal(destination, routePath, cumulativeDist, context);
+    }
+
+    private double[] computeCumulativeDistances(List<GeoPoint> routePath) {
+        double[] cumulativeDist = new double[routePath.size()];
+        cumulativeDist[0] = 0.0;
+        for (int i = 1; i < routePath.size(); i++) {
+            GeoPoint pPrev = routePath.get(i - 1);
+            GeoPoint pCurr = routePath.get(i);
+            cumulativeDist[i] = cumulativeDist[i - 1] + GeoUtils.distanceKm(pPrev.lat(), pPrev.lng(), pCurr.lat(), pCurr.lng());
+        }
+        return cumulativeDist;
+    }
+
+    private JourneyProgress calculateLinearFallback(Destination destination, ProgressionContext context) {
+        if (destination == null || destination.getLatitude() == null || destination.getLongitude() == null) {
+            return JourneyProgress.builder().destinationId(destination != null ? destination.getId() : null).build();
+        }
+        GeoPoint origin = (context != null && context.getOrigin() != null) ? context.getOrigin() : new GeoPoint(destination.getLatitude(), destination.getLongitude());
+        GeoPoint destPoint = (context != null && context.getDestination() != null) ? context.getDestination() : origin;
+        double progress = distanceCalculator.calculateDistanceKm(origin.lat(), origin.lng(), destination.getLatitude(), destination.getLongitude());
+        double total = distanceCalculator.calculateDistanceKm(origin.lat(), origin.lng(), destPoint.lat(), destPoint.lng());
+        return JourneyProgress.builder()
+                .destinationId(destination.getId())
+                .progressDistanceKm(progress)
+                .remainingDistanceKm(Math.max(0.0, total - progress))
+                .routeSegmentIndex(0)
+                .build();
+    }
+
+    private JourneyProgress calculateProgressInternal(Destination destination, List<GeoPoint> routePath, double[] cumulativeDist, ProgressionContext context) {
         if (destination == null || destination.getLatitude() == null || destination.getLongitude() == null) {
             return JourneyProgress.builder()
                     .destinationId(destination != null ? destination.getId() : null)
@@ -70,31 +113,6 @@ public class DefaultJourneyProgressionEngine implements JourneyProgressionEngine
                     .build();
         }
 
-        List<GeoPoint> routePath = extractRoutePath(context);
-        if (routePath.size() < 2) {
-            // Fallback: simple linear progress if polyline is unavailable
-            GeoPoint origin = (context != null && context.getOrigin() != null) ? context.getOrigin() : new GeoPoint(destination.getLatitude(), destination.getLongitude());
-            GeoPoint destPoint = (context != null && context.getDestination() != null) ? context.getDestination() : origin;
-            
-            double progress = distanceCalculator.calculateDistanceKm(origin.lat(), origin.lng(), destination.getLatitude(), destination.getLongitude());
-            double total = distanceCalculator.calculateDistanceKm(origin.lat(), origin.lng(), destPoint.lat(), destPoint.lng());
-
-            return JourneyProgress.builder()
-                    .destinationId(destination.getId())
-                    .progressDistanceKm(progress)
-                    .remainingDistanceKm(Math.max(0.0, total - progress))
-                    .routeSegmentIndex(0)
-                    .build();
-        }
-
-        // Pre-compute cumulative polyline segment distances
-        double[] cumulativeDist = new double[routePath.size()];
-        cumulativeDist[0] = 0.0;
-        for (int i = 1; i < routePath.size(); i++) {
-            GeoPoint pPrev = routePath.get(i - 1);
-            GeoPoint pCurr = routePath.get(i);
-            cumulativeDist[i] = cumulativeDist[i - 1] + GeoUtils.distanceKm(pPrev.lat(), pPrev.lng(), pCurr.lat(), pCurr.lng());
-        }
         double totalRouteKm = cumulativeDist[routePath.size() - 1];
 
         // Find nearest segment and projection factor u

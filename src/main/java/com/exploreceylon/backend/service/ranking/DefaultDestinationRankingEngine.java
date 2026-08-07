@@ -121,11 +121,12 @@ public class DefaultDestinationRankingEngine implements DestinationRankingEngine
             return List.of();
         }
 
+        record ScoredCandidate(Destination destination, double score) {}
+
         return candidates.stream()
-                .sorted((d1, d2) -> Double.compare(
-                        calculateScore(d2, context),
-                        calculateScore(d1, context)
-                ))
+                .map(d -> new ScoredCandidate(d, calculateScore(d, context)))
+                .sorted((c1, c2) -> Double.compare(c2.score(), c1.score()))
+                .map(ScoredCandidate::destination)
                 .collect(Collectors.toList());
     }
 
