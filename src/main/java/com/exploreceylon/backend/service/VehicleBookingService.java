@@ -2,6 +2,8 @@ package com.exploreceylon.backend.service;
 
 import com.exploreceylon.backend.dto.vehicle.BookVehicleRequest;
 import com.exploreceylon.backend.dto.vehicle.VehicleBookingResponse;
+import com.exploreceylon.backend.exception.ForbiddenException;
+import com.exploreceylon.backend.exception.UnauthenticatedException;
 import com.exploreceylon.backend.model.*;
 import com.exploreceylon.backend.repository.*;
 import lombok.RequiredArgsConstructor;
@@ -31,8 +33,7 @@ public class VehicleBookingService {
         String email = SecurityContextHolder.getContext()
                 .getAuthentication().getName();
         return userRepository.findByEmail(email)
-                .orElseThrow(() -> new RuntimeException(
-                        "User not found"));
+                .orElseThrow(() -> new UnauthenticatedException("User not found"));
     }
 
     // ── Book Vehicle ───────────────────────────────────────
@@ -121,7 +122,7 @@ public class VehicleBookingService {
         boolean isOwner = booking.getUser().getId().equals(user.getId());
         boolean isAdmin = user.getRole() == User.Role.ADMIN;
         if (!isOwner && !isAdmin) {
-            throw new RuntimeException("Not authorized to access this booking");
+            throw new ForbiddenException("Not authorized to access this booking");
         }
     }
 

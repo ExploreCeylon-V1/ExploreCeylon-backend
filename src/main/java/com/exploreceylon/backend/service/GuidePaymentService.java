@@ -1,6 +1,7 @@
 package com.exploreceylon.backend.service;
 
 import com.exploreceylon.backend.dto.payment.*;
+import com.exploreceylon.backend.exception.UnauthenticatedException;
 import com.exploreceylon.backend.model.*;
 import com.exploreceylon.backend.model.GuidePayment.PaymentPhase;
 import com.exploreceylon.backend.model.GuidePayment.PaymentStatus;
@@ -190,6 +191,6 @@ public class GuidePaymentService {
 
     private User getCurrentUser() {
         String email = SecurityContextHolder.getContext().getAuthentication().getName();
-        return userRepo.findByEmail(email).orElseThrow(() -> new RuntimeException("User not found"));
+        return userRepo.findByEmail(email).orElseThrow(() -> new UnauthenticatedException("User not found"));
     }
 }

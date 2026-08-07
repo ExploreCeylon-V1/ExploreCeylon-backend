@@ -1,6 +1,8 @@
 package com.exploreceylon.backend.service;
 
 import com.exploreceylon.backend.dto.trip.*;
+import com.exploreceylon.backend.exception.ForbiddenException;
+import com.exploreceylon.backend.exception.UnauthenticatedException;
 import com.exploreceylon.backend.model.*;
 import com.exploreceylon.backend.model.Trip.TripStatus;
 import com.exploreceylon.backend.repository.*;
@@ -50,7 +52,7 @@ public class TripService {
         String email = SecurityContextHolder.getContext()
                 .getAuthentication().getName();
         return userRepository.findByEmail(email)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+                .orElseThrow(() -> new UnauthenticatedException("User not found"));
     }
 
     // ── Auto-generate trip title ───────────────────────────
@@ -186,7 +188,7 @@ public class TripService {
     // ── Ownership guard — every non-public trip operation must own the trip ──
     private void assertOwner(Trip trip, User user) {
         if (!trip.getUser().getId().equals(user.getId())) {
-            throw new RuntimeException("Not authorized to access this trip");
+            throw new ForbiddenException("Not authorized to access this trip");
         }
     }
 

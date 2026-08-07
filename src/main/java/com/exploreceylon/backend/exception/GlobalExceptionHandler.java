@@ -39,6 +39,27 @@ public class GlobalExceptionHandler {
                 .body(Map.of("error", ex.getMessage()));
     }
 
+    // Unauthenticated (401)
+    @ExceptionHandler(UnauthenticatedException.class)
+    public ResponseEntity<Map<String, String>> handleUnauthenticated(UnauthenticatedException ex) {
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .body(Map.of("error", "Unauthorized", "message", ex.getMessage()));
+    }
+
+    // Forbidden (403)
+    @ExceptionHandler(ForbiddenException.class)
+    public ResponseEntity<Map<String, String>> handleForbidden(ForbiddenException ex) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(Map.of("error", "Forbidden", "message", ex.getMessage()));
+    }
+
+    // Resource Not Found (404)
+    @ExceptionHandler(ResourceNotFoundException.class)
+    public ResponseEntity<Map<String, String>> handleNotFound(ResourceNotFoundException ex) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(Map.of("error", "Not Found", "message", ex.getMessage()));
+    }
+
     // Runtime errors
     @ExceptionHandler(RuntimeException.class)
     public ResponseEntity<Map<String, String>> handleRuntime(
