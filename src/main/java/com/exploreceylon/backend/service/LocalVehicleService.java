@@ -4,6 +4,7 @@ import com.exploreceylon.backend.dto.vehicle.CreateVehicleReviewRequest;
 import com.exploreceylon.backend.dto.vehicle.LocalVehicleRequest;
 import com.exploreceylon.backend.dto.vehicle.LocalVehicleResponse;
 import com.exploreceylon.backend.dto.vehicle.VehicleReviewResponse;
+import com.exploreceylon.backend.exception.UnauthenticatedException;
 import com.exploreceylon.backend.model.User;
 import com.exploreceylon.backend.model.Vehicle;
 import com.exploreceylon.backend.model.VehicleBooking;
@@ -36,7 +37,7 @@ public class LocalVehicleService {
         String email = SecurityContextHolder.getContext()
                 .getAuthentication().getName();
         return userRepository.findByEmail(email)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+                .orElseThrow(() -> new UnauthenticatedException("User not found"));
     }
 
     // ── Search Vehicles ────────────────────────────────────────

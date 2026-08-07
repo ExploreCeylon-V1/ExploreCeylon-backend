@@ -1,6 +1,8 @@
 package com.exploreceylon.backend.service;
 
 import com.exploreceylon.backend.dto.guide.*;
+import com.exploreceylon.backend.exception.ForbiddenException;
+import com.exploreceylon.backend.exception.UnauthenticatedException;
 import com.exploreceylon.backend.model.*;
 import com.exploreceylon.backend.repository.*;
 import lombok.RequiredArgsConstructor;
@@ -32,7 +34,7 @@ public class TourGuideService {
         String email = SecurityContextHolder.getContext()
                 .getAuthentication().getName();
         return userRepository.findByEmail(email)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+                .orElseThrow(() -> new UnauthenticatedException("User not found"));
     }
 
     // ── Get All Guides ─────────────────────────────────────
@@ -216,7 +218,7 @@ public class TourGuideService {
         boolean isOwner = booking.getUser().getId().equals(user.getId());
         boolean isAdmin = user.getRole() == User.Role.ADMIN;
         if (!isOwner && !isAdmin) {
-            throw new RuntimeException("Not your booking");
+            throw new ForbiddenException("Not authorized to access this booking");
         }
         return toBookingResponse(booking);
     }

@@ -1,6 +1,7 @@
 package com.exploreceylon.backend.service;
 
 import com.exploreceylon.backend.dto.notification.NotificationResponse;
+import com.exploreceylon.backend.exception.UnauthenticatedException;
 import com.exploreceylon.backend.model.Notification;
 import com.exploreceylon.backend.model.User;
 import com.exploreceylon.backend.repository.NotificationRepository;
@@ -92,6 +93,6 @@ public class NotificationService {
 
     private User getCurrentUser() {
         String email = SecurityContextHolder.getContext().getAuthentication().getName();
-        return userRepo.findByEmail(email).orElseThrow(() -> new RuntimeException("User not found"));
+        return userRepo.findByEmail(email).orElseThrow(() -> new UnauthenticatedException("User not found"));
     }
 }
