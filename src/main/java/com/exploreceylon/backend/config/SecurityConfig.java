@@ -102,6 +102,8 @@ public class SecurityConfig {
                 .requestMatchers("/api/v1/budget/**").authenticated()
                 .requestMatchers(HttpMethod.POST, "/api/v1/contact").permitAll()  // public submit
                 .requestMatchers("/api/v1/contact/admin/**").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.POST, "/api/subscribe", "/api/v1/subscribe").permitAll() // public newsletter subscribe
+                .requestMatchers("/api/admin/subscribe-emails/**", "/api/v1/admin/subscribe-emails/**").hasRole("ADMIN")
                 .requestMatchers("/api/v1/payments/*/notify").permitAll() // PayHere webhooks
                 .requestMatchers("/api/v1/payments/**").authenticated()
                 .requestMatchers("/api/v1/guide-payments/**").hasRole("ADMIN")

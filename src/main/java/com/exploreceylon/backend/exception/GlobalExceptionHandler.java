@@ -60,6 +60,13 @@ public class GlobalExceptionHandler {
                 .body(Map.of("error", "Not Found", "message", ex.getMessage()));
     }
 
+    // Duplicate Subscription (409)
+    @ExceptionHandler(DuplicateSubscriptionException.class)
+    public ResponseEntity<Map<String, String>> handleDuplicateSubscription(DuplicateSubscriptionException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(Map.of("error", ex.getMessage()));
+    }
+
     // Runtime errors
     @ExceptionHandler(RuntimeException.class)
     public ResponseEntity<Map<String, String>> handleRuntime(
