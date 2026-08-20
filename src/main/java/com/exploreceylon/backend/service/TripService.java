@@ -43,9 +43,9 @@ public class TripService {
     private final com.exploreceylon.backend.repository.TripActivityLogRepository activityLogRepository;
 
     // Fixed conversion used only to compare the assembled itinerary's
-    // USD cost estimate against a user's LKR budget target (fix 4).
-    // Not a live FX rate — good enough for a warning-level estimate.
-    private static final double USD_TO_LKR_RATE = 300.0;
+    // USD cost estimate against a user's LKR budget target.
+    // Standard conversion rate aligned across system services (325.0 LKR / USD).
+    private static final double USD_TO_LKR_RATE = 325.0;
 
     // ── Get current logged-in user ─────────────────────────
     private User getCurrentUser() {
