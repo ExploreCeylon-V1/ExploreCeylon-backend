@@ -92,7 +92,7 @@ public class DefaultPlannerFacadeService implements PlannerFacadeService {
 
         int durationDays = Math.max(1, request.getTripDays());
         LocalDate startDate = request.getStartDate() != null ? request.getStartDate() : LocalDate.now();
-        BudgetLevel budgetLevel = parseBudget(request.getBudget());
+        BudgetLevel budgetLevel = parseBudget(request.getBudget(), request.getSpecialNotes());
         List<String> styles = request.getTravelStyle() != null ? List.of(request.getTravelStyle()) : List.of("BALANCED");
 
         GeoPoint originPoint = itineraryAssemblyService.geocode(request.getOrigin())
@@ -227,11 +227,23 @@ public class DefaultPlannerFacadeService implements PlannerFacadeService {
         return response;
     }
 
-    private BudgetLevel parseBudget(String budgetStr) {
+    private BudgetLevel parseBudget(String budgetStr, String specialNotes) {
+        if (specialNotes != null && !specialNotes.isBlank()) {
+            String notesLower = specialNotes.toLowerCase(java.util.Locale.ROOT);
+            if (notesLower.contains("reduce budget") || notesLower.contains("lower budget") || notesLower.contains("cheap") || notesLower.contains("budget target") || notesLower.contains("50,000") || notesLower.contains("280") || notesLower.contains("budget")) {
+                return BudgetLevel.BUDGET;
+            }
+            if (notesLower.contains("luxury") || notesLower.contains("premium")) {
+                return BudgetLevel.LUXURY;
+            }
+        }
         if (budgetStr == null) return BudgetLevel.MID_RANGE;
         try {
             return BudgetLevel.valueOf(budgetStr.toUpperCase());
         } catch (Exception e) {
+            if ("LOW".equalsIgnoreCase(budgetStr) || "BUDGET".equalsIgnoreCase(budgetStr) || "SAVER".equalsIgnoreCase(budgetStr)) {
+                return BudgetLevel.BUDGET;
+            }
             return BudgetLevel.MID_RANGE;
         }
     }

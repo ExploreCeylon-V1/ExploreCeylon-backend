@@ -482,19 +482,71 @@ public class ItineraryAssemblyService {
 
                 // User Edit / Special Notes Keyword Boosting
                 double promptBonus = 0.0;
+                double detourMultiplier = 2.0;
+
                 if (specialNotes != null && !specialNotes.isBlank()) {
                     String notesLower = specialNotes.toLowerCase(Locale.ROOT);
                     String nameLower = d.getName() != null ? d.getName().toLowerCase(Locale.ROOT) : "";
                     String districtLower = d.getDistrict() != null ? d.getDistrict().toLowerCase(Locale.ROOT) : "";
+                    String descLower = d.getDescription() != null ? d.getDescription().toLowerCase(Locale.ROOT) : "";
 
-                    boolean isRemove = notesLower.contains("remove") || notesLower.contains("delete") || notesLower.contains("exclude");
-                    for (String word : notesLower.split("[^a-zA-Z0-9]+")) {
-                        if (word.length() >= 4 && (nameLower.contains(word) || districtLower.contains(word))) {
-                            if (isRemove) {
-                                promptBonus -= 500.0;
-                            } else {
-                                promptBonus += 300.0;
+                    // Less driving / Route optimization: penalize long detours more heavily
+                    if (notesLower.contains("less driving") || notesLower.contains("reduce driving") || notesLower.contains("optimize route")) {
+                        detourMultiplier = 4.0;
+                    }
+
+                    // Handle "Replace X with Y"
+                    if (notesLower.contains("replace")) {
+                        int withIdx = notesLower.indexOf(" with ");
+                        if (withIdx > 0) {
+                            String removePart = notesLower.substring(0, withIdx);
+                            String addPart = notesLower.substring(withIdx + 6);
+
+                            for (String w : removePart.split("[^a-zA-Z0-9]+")) {
+                                if (w.length() >= 4 && (nameLower.contains(w) || districtLower.contains(w))) {
+                                    promptBonus -= 500.0;
+                                }
                             }
+                            for (String w : addPart.split("[^a-zA-Z0-9]+")) {
+                                if (w.length() >= 4 && (nameLower.contains(w) || districtLower.contains(w))) {
+                                    promptBonus += 400.0;
+                                }
+                            }
+                        }
+                    }
+
+                    // Handle "Remove / Delete / Exclude"
+                    boolean isRemove = notesLower.contains("remove") || notesLower.contains("delete") || notesLower.contains("exclude");
+                    if (isRemove && !notesLower.contains("replace")) {
+                        for (String word : notesLower.split("[^a-zA-Z0-9]+")) {
+                            if (word.length() >= 4 && (nameLower.contains(word) || districtLower.contains(word))) {
+                                promptBonus -= 500.0;
+                            }
+                        }
+                    }
+
+                    // Handle Add / Move & Day N affinity
+                    if (!isRemove && !notesLower.contains("replace")) {
+                        for (String word : notesLower.split("[^a-zA-Z0-9]+")) {
+                            if (word.length() >= 4 && (nameLower.contains(word) || districtLower.contains(word))) {
+                                promptBonus += 300.0;
+                                java.util.regex.Matcher m = java.util.regex.Pattern.compile("\\bday\\s+(\\d+)\\b").matcher(notesLower);
+                                if (m.find()) {
+                                    int targetDay = Integer.parseInt(m.group(1));
+                                    if (currentDayNum == targetDay) {
+                                        promptBonus += 250.0;
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Family friendly filter
+                    if (notesLower.contains("family") || notesLower.contains("light walking")) {
+                        if (descLower.contains("strenuous") || descLower.contains("extreme") || descLower.contains("hard hike")) {
+                            promptBonus -= 300.0;
+                        } else {
+                            promptBonus += 50.0;
                         }
                     }
                 }
@@ -524,7 +576,7 @@ public class ItineraryAssemblyService {
                 }
 
                 double offCorridorDetour = detourKmMap.getOrDefault(d.getId(), 0.0);
-                double selectionMetric = rankScore + progressionBonus - (offCorridorDetour * 2.0);
+                double selectionMetric = rankScore + progressionBonus - (offCorridorDetour * detourMultiplier);
 
                 if (selectionMetric > bestSelectionMetric) {
                     bestSelectionMetric = selectionMetric;
