@@ -29,4 +29,7 @@ public class TripResponse {
     private String regions;
     private String interests;
     private String startingPoint;
+
+    // Embedded budget summary for public share view
+    private TripBudgetSummaryResponse budgetSummary;
 }

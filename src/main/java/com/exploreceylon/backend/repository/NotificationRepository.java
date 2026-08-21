@@ -17,4 +17,7 @@ public interface NotificationRepository extends JpaRepository<Notification, Long
     // if it runs more than once for the same booking.
     boolean existsByBookingTypeAndBookingIdAndType(
             String bookingType, Long bookingId, Notification.NotificationType type);
+
+    java.util.Optional<Notification> findTopByBookingTypeAndBookingIdAndTypeOrderByCreatedAtDesc(
+            String bookingType, Long bookingId, Notification.NotificationType type);
 }

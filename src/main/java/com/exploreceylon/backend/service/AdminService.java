@@ -37,8 +37,12 @@ public class AdminService {
     private final EventRepository           eventRepository;
     private final LoginHistoryRepository    loginHistoryRepository;
     private final AdminBookingQueryRepository adminBookingQueryRepository;
+    private final AdminPaymentQueryRepository adminPaymentQueryRepository;
     private final AdminReviewQueryRepository adminReviewQueryRepository;
     private final AdminReviewService        adminReviewService;
+    private final VehiclePaymentRepository  vehiclePaymentRepository;
+    private final GuidePaymentRepository    guidePaymentRepository;
+    private final NotificationService       notificationService;
     private final PasswordEncoder           passwordEncoder;
 
     private static final double COMMISSION_RATE = 0.15;
@@ -350,10 +354,8 @@ public class AdminService {
                 .findByAvailableTrue().size();
         long booked    = total - available;
 
-        List<VehicleBooking> bookings =
-                vehicleBookingRepository.findAll();
-        double revenue    = bookings.stream()
-                .mapToDouble(VehicleBooking::getTotalCost).sum();
+        Double completedRevenue = vehicleBookingRepository.sumTotalCostByStatus(VehicleBooking.BookingStatus.COMPLETED);
+        double revenue    = completedRevenue != null ? completedRevenue : 0.0;
         double commission = revenue * COMMISSION_RATE;
 
         return VehicleStatsResponse.builder()
@@ -382,10 +384,8 @@ public class AdminService {
                         == currentMonth)
                 .count();
 
-        List<GuideBooking> bookings =
-                guideBookingRepository.findAll();
-        double revenue    = bookings.stream()
-                .mapToDouble(GuideBooking::getTotalCost).sum();
+        Double completedRevenue = guideBookingRepository.sumTotalCostByStatus(GuideBooking.BookingStatus.COMPLETED);
+        double revenue    = completedRevenue != null ? completedRevenue : 0.0;
         double commission = revenue * COMMISSION_RATE;
 
         return GuideStatsResponse.builder()
@@ -573,4 +573,364 @@ public class AdminService {
         return map;
     }
 
+    // ── Admin Payment Management ──────────────────────────
+
+    public PageResponse<AdminPaymentResponse> getAllPayments(
+            String type, String completionStatus, String search,
+            LocalDate dateFrom, LocalDate dateTo,
+            String sortBy, String sortDir, int page, int size) {
+
+        AdminPaymentQueryRepository.Result result = adminPaymentQueryRepository.search(
+                type, completionStatus, search, dateFrom, dateTo,
+                sortBy, sortDir, page, size);
+
+        LocalDate today = LocalDate.now();
+        List<AdminPaymentResponse> content = result.rows().stream().map(row -> {
+            boolean isCompleted = "COMPLETED".equalsIgnoreCase(row.status());
+            Double totalCost = row.totalCost() != null ? row.totalCost() : 0.0;
+            Double advanceAmount = row.advanceAmount() != null ? row.advanceAmount() : totalCost * 0.20;
+            Double balanceAmount = row.balanceAmount() != null ? row.balanceAmount() : totalCost * 0.80;
+
+            Double paidAmount = isCompleted ? totalCost : advanceAmount;
+            Double remainingBalance = isCompleted ? 0.0 : balanceAmount;
+            String paymentCompletion = isCompleted ? "100%" : "20%";
+            String compStatus = isCompleted ? "FULL_100" : "PARTIAL_20";
+
+            LocalDate dueDate = row.endDate();
+            boolean isOverdue = !isCompleted && dueDate != null && dueDate.isBefore(today);
+
+            return AdminPaymentResponse.builder()
+                    .bookingId(row.id())
+                    .bookingType(row.type())
+                    .bookingStatus(row.status())
+                    .customerId(row.customerId())
+                    .customerName(row.customerName())
+                    .customerEmail(row.customerEmail())
+                    .customerPhone(row.customerPhone())
+                    .providerId(row.providerId())
+                    .providerName(row.providerName())
+                    .tripId(row.tripId())
+                    .tripTitle(row.tripTitle())
+                    .startDate(row.startDate())
+                    .endDate(row.endDate())
+                    .paymentDueDate(dueDate)
+                    .totalCost(totalCost)
+                    .advanceAmount(advanceAmount)
+                    .balanceAmount(balanceAmount)
+                    .paidAmount(paidAmount)
+                    .remainingBalance(remainingBalance)
+                    .currency("USD")
+                    .paymentCompletion(paymentCompletion)
+                    .completionStatus(compStatus)
+                    .initialPaymentDate(row.initialPaidAt() != null ? row.initialPaidAt() : row.createdAt())
+                    .finalPaymentDate(row.finalPaidAt())
+                    .isOverdue(isOverdue)
+                    .createdAt(row.createdAt())
+                    .build();
+        }).toList();
+
+        int totalPages = (int) Math.ceil((double) result.totalElements() / size);
+        return PageResponse.<AdminPaymentResponse>builder()
+                .content(content)
+                .totalElements(result.totalElements())
+                .totalPages(totalPages)
+                .page(page)
+                .size(size)
+                .build();
+    }
+
+    public AdminPaymentSummaryResponse getPaymentSummary() {
+        return adminPaymentQueryRepository.getSummary(LocalDate.now());
+    }
+
+    public AdminPaymentDetailResponse getPaymentDetail(String type, Long bookingId) {
+        LocalDate today = LocalDate.now();
+        if ("VEHICLE".equalsIgnoreCase(type)) {
+            VehicleBooking vb = vehicleBookingRepository.findById(bookingId)
+                    .orElseThrow(() -> new com.exploreceylon.backend.exception.ResourceNotFoundException("Vehicle booking not found: " + bookingId));
+
+            List<VehiclePayment> payments = vehiclePaymentRepository.findByVehicleBookingId(bookingId);
+            VehiclePayment advancePayment = payments.stream()
+                    .filter(p -> p.getPaymentPhase() == VehiclePayment.PaymentPhase.ADVANCE && p.getStatus() == VehiclePayment.PaymentStatus.COMPLETED)
+                    .findFirst().orElse(null);
+            VehiclePayment finalPayment = payments.stream()
+                    .filter(p -> p.getPaymentPhase() == VehiclePayment.PaymentPhase.FINAL && p.getStatus() == VehiclePayment.PaymentStatus.COMPLETED)
+                    .findFirst().orElse(null);
+
+            boolean isCompleted = vb.getStatus() == VehicleBooking.BookingStatus.COMPLETED;
+            Double totalCost = vb.getTotalCost() != null ? vb.getTotalCost() : 0.0;
+            Double advanceAmt = vb.getAdvanceAmount() != null ? vb.getAdvanceAmount() : totalCost * 0.20;
+            Double balanceAmt = vb.getBalanceAmount() != null ? vb.getBalanceAmount() : totalCost * 0.80;
+            Double totalPaid = isCompleted ? totalCost : (advancePayment != null ? advancePayment.getAmount() : advanceAmt);
+            Double remainingAmt = isCompleted ? 0.0 : balanceAmt;
+            boolean isOverdue = !isCompleted && vb.getDropoffDate() != null && vb.getDropoffDate().isBefore(today);
+            long daysOverdue = isOverdue ? java.time.temporal.ChronoUnit.DAYS.between(vb.getDropoffDate(), today) : 0L;
+
+            Map<String, Object> providerDetails = new HashMap<>();
+            Vehicle v = vb.getVehicle();
+            if (v != null) {
+                providerDetails.put("vehicleType", v.getType() != null ? v.getType().name() : "N/A");
+                providerDetails.put("brand", v.getBrand());
+                providerDetails.put("model", v.getModel());
+                providerDetails.put("licensePlate", v.getLicensePlate());
+                providerDetails.put("seats", v.getSeats());
+                providerDetails.put("driverName", v.getDriverName());
+                providerDetails.put("driverPhone", v.getDriverPhone());
+                providerDetails.put("whatsappNumber", v.getWhatsappNumber());
+                providerDetails.put("driverLanguages", v.getDriverLanguages());
+            }
+
+            AdminPaymentDetailResponse.PhaseDetail initPhase = AdminPaymentDetailResponse.PhaseDetail.builder()
+                    .phase("ADVANCE")
+                    .percent(20)
+                    .amount(advanceAmt)
+                    .status(advancePayment != null ? advancePayment.getStatus().name() : (vb.getStatus() != VehicleBooking.BookingStatus.PENDING_PAYMENT ? "COMPLETED" : "PENDING"))
+                    .payhereOrderId(advancePayment != null ? advancePayment.getPayhereOrderId() : null)
+                    .payherePaymentId(advancePayment != null ? advancePayment.getPayherePaymentId() : null)
+                    .paidAt(advancePayment != null ? advancePayment.getPaidAt() : vb.getCreatedAt())
+                    .currency("USD")
+                    .dueDate(vb.getPickupDate())
+                    .build();
+
+            AdminPaymentDetailResponse.PhaseDetail finalPhase = AdminPaymentDetailResponse.PhaseDetail.builder()
+                    .phase("FINAL")
+                    .percent(80)
+                    .amount(balanceAmt)
+                    .status(finalPayment != null ? finalPayment.getStatus().name() : (isCompleted ? "COMPLETED" : "PENDING"))
+                    .payhereOrderId(finalPayment != null ? finalPayment.getPayhereOrderId() : null)
+                    .payherePaymentId(finalPayment != null ? finalPayment.getPayherePaymentId() : null)
+                    .paidAt(finalPayment != null ? finalPayment.getPaidAt() : null)
+                    .currency("USD")
+                    .dueDate(vb.getDropoffDate())
+                    .build();
+
+            LocalDateTime lastReminder = notificationService.getLastReminderSentAt("VEHICLE", bookingId);
+
+            return AdminPaymentDetailResponse.builder()
+                    .bookingId(vb.getId())
+                    .bookingType("VEHICLE")
+                    .bookingStatus(vb.getStatus().name())
+                    .bookingCreatedAt(vb.getCreatedAt())
+                    .startDate(vb.getPickupDate())
+                    .endDate(vb.getDropoffDate())
+                    .pickupTime(vb.getPickupTime())
+                    .dropoffTime(vb.getDropoffTime())
+                    .pickupLocation(vb.getPickupLocation())
+                    .dropoffLocation(vb.getDropoffLocation())
+                    .notes(vb.getNotes())
+                    .customerId(vb.getUser() != null ? vb.getUser().getId() : null)
+                    .customerName(vb.getUser() != null ? vb.getUser().getName() : "N/A")
+                    .customerEmail(vb.getUser() != null ? vb.getUser().getEmail() : "N/A")
+                    .customerPhone(vb.getUser() != null ? vb.getUser().getPhone() : "N/A")
+                    .providerId(v != null ? v.getId() : null)
+                    .providerName(v != null ? v.getName() : "N/A")
+                    .providerPhone(v != null ? v.getDriverPhone() : "N/A")
+                    .providerDistrict(v != null ? v.getDistrict() : "N/A")
+                    .pricePerDay(v != null ? v.getPricePerDay() : null)
+                    .providerDetails(providerDetails)
+                    .totalCost(totalCost)
+                    .advanceAmount(advanceAmt)
+                    .balanceAmount(balanceAmt)
+                    .totalPaid(totalPaid)
+                    .remainingBalance(remainingAmt)
+                    .currency("USD")
+                    .paymentCompletion(isCompleted ? "100%" : "20%")
+                    .completionStatus(isCompleted ? "FULL_100" : "PARTIAL_20")
+                    .initialPayment(initPhase)
+                    .finalPayment(finalPhase)
+                    .isOverdue(isOverdue)
+                    .paymentDueDate(vb.getDropoffDate())
+                    .daysOverdue(daysOverdue)
+                    .tripId(vb.getTrip() != null ? vb.getTrip().getId() : null)
+                    .tripTitle(vb.getTrip() != null ? vb.getTrip().getTitle() : null)
+                    .reminderSent(lastReminder != null)
+                    .lastReminderSentAt(lastReminder)
+                    .build();
+
+        } else if ("GUIDE".equalsIgnoreCase(type)) {
+            GuideBooking gb = guideBookingRepository.findById(bookingId)
+                    .orElseThrow(() -> new com.exploreceylon.backend.exception.ResourceNotFoundException("Guide booking not found: " + bookingId));
+
+            List<GuidePayment> payments = guidePaymentRepository.findByGuideBookingId(bookingId);
+            GuidePayment advancePayment = payments.stream()
+                    .filter(p -> p.getPaymentPhase() == GuidePayment.PaymentPhase.ADVANCE && p.getStatus() == GuidePayment.PaymentStatus.COMPLETED)
+                    .findFirst().orElse(null);
+            GuidePayment finalPayment = payments.stream()
+                    .filter(p -> p.getPaymentPhase() == GuidePayment.PaymentPhase.FINAL && p.getStatus() == GuidePayment.PaymentStatus.COMPLETED)
+                    .findFirst().orElse(null);
+
+            boolean isCompleted = gb.getStatus() == GuideBooking.BookingStatus.COMPLETED;
+            Double totalCost = gb.getTotalCost() != null ? gb.getTotalCost() : 0.0;
+            Double advanceAmt = gb.getAdvanceAmount() != null ? gb.getAdvanceAmount() : totalCost * 0.20;
+            Double balanceAmt = gb.getBalanceAmount() != null ? gb.getBalanceAmount() : totalCost * 0.80;
+            Double totalPaid = isCompleted ? totalCost : (advancePayment != null ? advancePayment.getAmount() : advanceAmt);
+            Double remainingAmt = isCompleted ? 0.0 : balanceAmt;
+            boolean isOverdue = !isCompleted && gb.getEndDate() != null && gb.getEndDate().isBefore(today);
+            long daysOverdue = isOverdue ? java.time.temporal.ChronoUnit.DAYS.between(gb.getEndDate(), today) : 0L;
+
+            Map<String, Object> providerDetails = new HashMap<>();
+            TourGuide g = gb.getGuide();
+            if (g != null) {
+                providerDetails.put("languages", g.getLanguages());
+                providerDetails.put("specialties", g.getSpecialties());
+                providerDetails.put("district", g.getDistrict());
+                providerDetails.put("rating", g.getRating());
+                providerDetails.put("phone", g.getPhone());
+                providerDetails.put("whatsappNumber", g.getWhatsappNumber());
+            }
+
+            AdminPaymentDetailResponse.PhaseDetail initPhase = AdminPaymentDetailResponse.PhaseDetail.builder()
+                    .phase("ADVANCE")
+                    .percent(20)
+                    .amount(advanceAmt)
+                    .status(advancePayment != null ? advancePayment.getStatus().name() : (gb.getStatus() != GuideBooking.BookingStatus.PENDING_PAYMENT ? "COMPLETED" : "PENDING"))
+                    .payhereOrderId(advancePayment != null ? advancePayment.getPayhereOrderId() : null)
+                    .payherePaymentId(advancePayment != null ? advancePayment.getPayherePaymentId() : null)
+                    .paidAt(advancePayment != null ? advancePayment.getPaidAt() : gb.getCreatedAt())
+                    .currency("USD")
+                    .dueDate(gb.getStartDate())
+                    .build();
+
+            AdminPaymentDetailResponse.PhaseDetail finalPhase = AdminPaymentDetailResponse.PhaseDetail.builder()
+                    .phase("FINAL")
+                    .percent(80)
+                    .amount(balanceAmt)
+                    .status(finalPayment != null ? finalPayment.getStatus().name() : (isCompleted ? "COMPLETED" : "PENDING"))
+                    .payhereOrderId(finalPayment != null ? finalPayment.getPayhereOrderId() : null)
+                    .payherePaymentId(finalPayment != null ? finalPayment.getPayherePaymentId() : null)
+                    .paidAt(finalPayment != null ? finalPayment.getPaidAt() : null)
+                    .currency("USD")
+                    .dueDate(gb.getEndDate())
+                    .build();
+
+            LocalDateTime lastReminder = notificationService.getLastReminderSentAt("GUIDE", bookingId);
+
+            return AdminPaymentDetailResponse.builder()
+                    .bookingId(gb.getId())
+                    .bookingType("GUIDE")
+                    .bookingStatus(gb.getStatus().name())
+                    .bookingCreatedAt(gb.getCreatedAt())
+                    .startDate(gb.getStartDate())
+                    .endDate(gb.getEndDate())
+                    .notes(gb.getNotes())
+                    .customerId(gb.getUser() != null ? gb.getUser().getId() : null)
+                    .customerName(gb.getUser() != null ? gb.getUser().getName() : "N/A")
+                    .customerEmail(gb.getUser() != null ? gb.getUser().getEmail() : "N/A")
+                    .customerPhone(gb.getUser() != null ? gb.getUser().getPhone() : "N/A")
+                    .providerId(g != null ? g.getId() : null)
+                    .providerName(g != null ? g.getFullName() : "N/A")
+                    .providerPhone(g != null ? g.getPhone() : "N/A")
+                    .providerDistrict(g != null ? g.getDistrict() : "N/A")
+                    .pricePerDay(g != null ? g.getPricePerDay() : null)
+                    .providerDetails(providerDetails)
+                    .totalCost(totalCost)
+                    .advanceAmount(advanceAmt)
+                    .balanceAmount(balanceAmt)
+                    .totalPaid(totalPaid)
+                    .remainingBalance(remainingAmt)
+                    .currency("USD")
+                    .paymentCompletion(isCompleted ? "100%" : "20%")
+                    .completionStatus(isCompleted ? "FULL_100" : "PARTIAL_20")
+                    .initialPayment(initPhase)
+                    .finalPayment(finalPhase)
+                    .isOverdue(isOverdue)
+                    .paymentDueDate(gb.getEndDate())
+                    .daysOverdue(daysOverdue)
+                    .tripId(gb.getTrip() != null ? gb.getTrip().getId() : null)
+                    .tripTitle(gb.getTrip() != null ? gb.getTrip().getTitle() : null)
+                    .reminderSent(lastReminder != null)
+                    .lastReminderSentAt(lastReminder)
+                    .build();
+        } else {
+            throw new RuntimeException("Invalid booking type: " + type + ". Expected VEHICLE or GUIDE.");
+        }
+    }
+
+    public Map<String, Object> notifyOverdueUser(String type, Long bookingId) {
+        return notifyOverdueUser(type, bookingId, null);
+    }
+
+    public Map<String, Object> notifyOverdueUser(String type, Long bookingId, String customMessage) {
+        LocalDate today = LocalDate.now();
+        User user;
+        Double balanceAmount;
+        LocalDate serviceEndDate;
+        String providerName;
+
+        if ("VEHICLE".equalsIgnoreCase(type)) {
+            VehicleBooking vb = vehicleBookingRepository.findById(bookingId)
+                    .orElseThrow(() -> new com.exploreceylon.backend.exception.ResourceNotFoundException("Vehicle booking not found: " + bookingId));
+            if (vb.getStatus() != VehicleBooking.BookingStatus.CONFIRMED) {
+                throw new RuntimeException("Booking #" + bookingId + " is not in CONFIRMED state (status=" + vb.getStatus() + "). Only confirmed bookings with pending balance can receive reminders.");
+            }
+            balanceAmount = vb.getBalanceAmount() != null ? vb.getBalanceAmount() : vb.getTotalCost() * 0.80;
+            if (balanceAmount <= 0) {
+                throw new RuntimeException("Booking #" + bookingId + " has no remaining balance.");
+            }
+            user = vb.getUser();
+            serviceEndDate = vb.getDropoffDate();
+            providerName = vb.getVehicle() != null ? vb.getVehicle().getName() : "Vehicle Rental";
+        } else if ("GUIDE".equalsIgnoreCase(type)) {
+            GuideBooking gb = guideBookingRepository.findById(bookingId)
+                    .orElseThrow(() -> new com.exploreceylon.backend.exception.ResourceNotFoundException("Guide booking not found: " + bookingId));
+            if (gb.getStatus() != GuideBooking.BookingStatus.CONFIRMED) {
+                throw new RuntimeException("Booking #" + bookingId + " is not in CONFIRMED state (status=" + gb.getStatus() + "). Only confirmed bookings with pending balance can receive reminders.");
+            }
+            balanceAmount = gb.getBalanceAmount() != null ? gb.getBalanceAmount() : gb.getTotalCost() * 0.80;
+            if (balanceAmount <= 0) {
+                throw new RuntimeException("Booking #" + bookingId + " has no remaining balance.");
+            }
+            user = gb.getUser();
+            serviceEndDate = gb.getEndDate();
+            providerName = gb.getGuide() != null ? gb.getGuide().getFullName() : "Tour Guide";
+        } else {
+            throw new RuntimeException("Invalid booking type: " + type + ". Expected VEHICLE or GUIDE.");
+        }
+
+        if (user == null) {
+            throw new RuntimeException("No customer account linked to booking #" + bookingId);
+        }
+
+        String finalMessage;
+        if (customMessage != null) {
+            String trimmed = customMessage.trim();
+            if (trimmed.isEmpty()) {
+                throw new RuntimeException("Notification message cannot be blank");
+            }
+            if (trimmed.length() > 500) {
+                throw new RuntimeException("Notification message exceeds maximum allowed length of 500 characters");
+            }
+            // Strip any raw HTML tags for security
+            finalMessage = trimmed.replaceAll("<[^>]*>", "");
+        } else {
+            boolean isOverdue = serviceEndDate != null && serviceEndDate.isBefore(today);
+            if (isOverdue) {
+                finalMessage = String.format("Your service for booking #%d ended on %s. The remaining 80%% balance of $%.2f is now overdue. Please complete your payment to finalize this booking.",
+                        bookingId, serviceEndDate, balanceAmount);
+            } else {
+                finalMessage = String.format("Your remaining 80%% payment of $%.2f for booking #%d is still pending. Please complete the outstanding payment to settle your booking.",
+                        balanceAmount, bookingId);
+            }
+        }
+
+        boolean isOverdue = serviceEndDate != null && serviceEndDate.isBefore(today);
+        String title = isOverdue
+                ? "Overdue 80% Balance Payment — " + providerName
+                : "Payment Reminder — " + providerName;
+
+        boolean sent = notificationService.sendAdminOverdueReminder(user, type.toUpperCase(), bookingId, title, finalMessage);
+        if (!sent) {
+            return Map.of(
+                    "success", false,
+                    "alreadySent", true,
+                    "message", "A balance reminder notification was already sent to this customer within the last 12 hours."
+            );
+        }
+
+        return Map.of(
+                "success", true,
+                "alreadySent", false,
+                "message", "Payment reminder successfully sent to " + user.getEmail()
+        );
+    }
 }

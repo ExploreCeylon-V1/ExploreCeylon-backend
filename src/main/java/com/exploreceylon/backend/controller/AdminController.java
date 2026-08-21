@@ -63,6 +63,48 @@ public class AdminController {
         return ResponseEntity.ok(java.util.Map.of("updated", count));
     }
 
+    // ── Payment Management ────────────────────────────────
+
+    // GET /api/v1/admin/payments
+    @GetMapping("/payments")
+    public ResponseEntity<PageResponse<AdminPaymentResponse>> getAllPayments(
+            @RequestParam(required = false) String type,
+            @RequestParam(required = false) String completionStatus,
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateFrom,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateTo,
+            @RequestParam(required = false, defaultValue = "createdAt") String sortBy,
+            @RequestParam(required = false, defaultValue = "desc") String sortDir,
+            @RequestParam(required = false, defaultValue = "0") int page,
+            @RequestParam(required = false, defaultValue = "20") int size) {
+        return ResponseEntity.ok(adminService.getAllPayments(
+                type, completionStatus, search, dateFrom, dateTo, sortBy, sortDir, page, size));
+    }
+
+    // GET /api/v1/admin/payments/summary
+    @GetMapping("/payments/summary")
+    public ResponseEntity<AdminPaymentSummaryResponse> getPaymentSummary() {
+        return ResponseEntity.ok(adminService.getPaymentSummary());
+    }
+
+    // GET /api/v1/admin/payments/{type}/{bookingId}
+    @GetMapping("/payments/{type}/{bookingId}")
+    public ResponseEntity<AdminPaymentDetailResponse> getPaymentDetail(
+            @PathVariable String type,
+            @PathVariable Long bookingId) {
+        return ResponseEntity.ok(adminService.getPaymentDetail(type, bookingId));
+    }
+
+    // POST /api/v1/admin/payments/{type}/{bookingId}/notify
+    @PostMapping("/payments/{type}/{bookingId}/notify")
+    public ResponseEntity<java.util.Map<String, Object>> notifyOverdueUser(
+            @PathVariable String type,
+            @PathVariable Long bookingId,
+            @jakarta.validation.Valid @RequestBody(required = false) AdminPaymentNotificationRequest request) {
+        String customMessage = request != null ? request.getMessage() : null;
+        return ResponseEntity.ok(adminService.notifyOverdueUser(type, bookingId, customMessage));
+    }
+
     // GET /api/v1/admin/revenue
     @GetMapping("/revenue")
     public ResponseEntity<RevenueResponse> getRevenue(

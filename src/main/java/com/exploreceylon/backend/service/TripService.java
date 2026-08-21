@@ -2,6 +2,7 @@ package com.exploreceylon.backend.service;
 
 import com.exploreceylon.backend.dto.trip.*;
 import com.exploreceylon.backend.exception.ForbiddenException;
+import com.exploreceylon.backend.exception.ResourceNotFoundException;
 import com.exploreceylon.backend.exception.UnauthenticatedException;
 import com.exploreceylon.backend.model.*;
 import com.exploreceylon.backend.model.Trip.TripStatus;
@@ -206,9 +207,15 @@ public class TripService {
     @Transactional(readOnly = true)
     public TripResponse getTripByShareToken(String token) {
         Trip trip = tripRepository.findByShareToken(token)
-                .orElseThrow(() -> new RuntimeException(
+                .orElseThrow(() -> new ResourceNotFoundException(
                         "Trip not found for token: " + token));
-        return toResponse(trip);
+        TripResponse res = toResponse(trip);
+
+        budgetRepository.findByTripId(trip.getId()).ifPresent(budget -> {
+            res.setBudgetSummary(toPublicBudgetSummary(budget));
+        });
+
+        return res;
     }
 
     // ── Update Trip Day ────────────────────────────────────
@@ -455,8 +462,14 @@ public class TripService {
 
         trip.setAiGenerated(true);
         trip.setStatus(TripStatus.GENERATED);
-        if (plannerResponse.getEstimatedCost() != null) {
-            trip.setBudgetAmountLkr(plannerResponse.getEstimatedCost().getGrandTotal());
+        if (req.getBudgetRange() != null) {
+            trip.setBudgetRange(req.getBudgetRange());
+        }
+        double newEstimatedTotal = trip.getDays().stream()
+                .mapToDouble(d -> d.getEstimatedDayCost() != null ? d.getEstimatedDayCost() : 0.0)
+                .sum();
+        if (newEstimatedTotal > 0) {
+            trip.setBudgetAmountLkr(newEstimatedTotal);
         }
 
         Trip saved = tripRepository.save(trip);
@@ -594,5 +607,67 @@ public class TripService {
         res.setOrderIndex(i.getOrderIndex());
         res.setNotes(i.getNotes());
         return res;
+    }
+
+    // ── MAPPER: Budget → TripBudgetSummaryResponse (public) ──
+    private TripBudgetSummaryResponse toPublicBudgetSummary(Budget budget) {
+        if (budget == null) return null;
+
+        List<BudgetItem> items = budget.getItems() != null ? budget.getItems() : java.util.Collections.emptyList();
+
+        double totalSpent = items.stream()
+                .mapToDouble(BudgetItem::getAmount)
+                .sum();
+        double totalBudget = budget.getTotalBudget() != null ? budget.getTotalBudget() : 0.0;
+        double remaining = totalBudget - totalSpent;
+        double usedPercentage = totalBudget > 0
+                ? (totalSpent / totalBudget) * 100.0
+                : 0.0;
+
+        String status = "ON_TRACK";
+        if (usedPercentage > 100.0) {
+            status = "OVER_BUDGET";
+        } else if (usedPercentage >= 80.0) {
+            status = "WARNING";
+        }
+
+        Map<String, Double> categoryBudgets = new HashMap<>();
+        if (budget.getCategoryBudgets() != null) {
+            budget.getCategoryBudgets().forEach((cat, amt) -> {
+                if (cat != null) categoryBudgets.put(cat.name(), amt);
+            });
+        }
+
+        Map<String, Double> categorySpent = new HashMap<>();
+        items.forEach(item -> {
+            if (item.getCategory() != null) {
+                categorySpent.merge(item.getCategory().name(), item.getAmount(), Double::sum);
+            }
+        });
+
+        List<TripBudgetSummaryResponse.PublicBudgetItemResponse> publicItems = items.stream()
+                .map(item -> TripBudgetSummaryResponse.PublicBudgetItemResponse.builder()
+                        .id(item.getId())
+                        .category(item.getCategory() != null ? item.getCategory().name() : "OTHER")
+                        .title(item.getTitle())
+                        .amount(item.getAmount())
+                        .currency(item.getCurrency() != null ? item.getCurrency() : "USD")
+                        .date(item.getDate())
+                        .autoAdded(item.getAutoAdded())
+                        .notes(item.getNotes())
+                        .build())
+                .collect(Collectors.toList());
+
+        return TripBudgetSummaryResponse.builder()
+                .totalBudget(totalBudget)
+                .totalSpent(totalSpent)
+                .remaining(remaining)
+                .usedPercentage(usedPercentage)
+                .currency(budget.getCurrency() != null ? budget.getCurrency() : "USD")
+                .status(status)
+                .categoryBudgets(categoryBudgets)
+                .categorySpent(categorySpent)
+                .items(publicItems)
+                .build();
     }
 }

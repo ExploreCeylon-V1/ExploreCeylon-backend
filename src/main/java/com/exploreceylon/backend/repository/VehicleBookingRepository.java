@@ -16,6 +16,9 @@ public interface VehicleBookingRepository
 
     long countByStatus(VehicleBooking.BookingStatus status);
 
+    @Query("SELECT COALESCE(SUM(b.totalCost), 0.0) FROM VehicleBooking b WHERE b.status = :status")
+    Double sumTotalCostByStatus(@Param("status") VehicleBooking.BookingStatus status);
+
     @Query("SELECT COALESCE(SUM(b.totalCost), 0) FROM VehicleBooking b " +
            "WHERE CAST(b.status AS string) = :status")
     Double sumRevenueByStatus(@Param("status") String status);

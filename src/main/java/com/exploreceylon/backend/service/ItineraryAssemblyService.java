@@ -520,22 +520,26 @@ public class ItineraryAssemblyService {
                     if (isRemove && !notesLower.contains("replace")) {
                         for (String word : notesLower.split("[^a-zA-Z0-9]+")) {
                             if (word.length() >= 4 && (nameLower.contains(word) || districtLower.contains(word))) {
-                                promptBonus -= 500.0;
+                                promptBonus -= 100000.0; // Massive global exclusion penalty so removed stop is never picked on any day
                             }
                         }
                     }
 
                     // Handle Add / Move & Day N affinity
                     if (!isRemove && !notesLower.contains("replace")) {
+                        java.util.regex.Matcher m = java.util.regex.Pattern.compile("\\bday\\s+(\\d+)\\b").matcher(notesLower);
+                        int targetDay = m.find() ? Integer.parseInt(m.group(1)) : -1;
+
                         for (String word : notesLower.split("[^a-zA-Z0-9]+")) {
                             if (word.length() >= 4 && (nameLower.contains(word) || districtLower.contains(word))) {
-                                promptBonus += 300.0;
-                                java.util.regex.Matcher m = java.util.regex.Pattern.compile("\\bday\\s+(\\d+)\\b").matcher(notesLower);
-                                if (m.find()) {
-                                    int targetDay = Integer.parseInt(m.group(1));
+                                if (targetDay > 0) {
                                     if (currentDayNum == targetDay) {
-                                        promptBonus += 250.0;
+                                        promptBonus += 2000.0; // Strong boost on requested target day
+                                    } else {
+                                        promptBonus -= 5000.0; // Heavy penalty on non-target days to hold candidate for target day
                                     }
+                                } else {
+                                    promptBonus += 300.0;
                                 }
                             }
                         }
@@ -578,7 +582,7 @@ public class ItineraryAssemblyService {
                 double offCorridorDetour = detourKmMap.getOrDefault(d.getId(), 0.0);
                 double selectionMetric = rankScore + progressionBonus - (offCorridorDetour * detourMultiplier);
 
-                if (selectionMetric > bestSelectionMetric) {
+                if (selectionMetric > -1000.0 && selectionMetric > bestSelectionMetric) {
                     bestSelectionMetric = selectionMetric;
                     bestCandidate = d;
                     bestDist = dist;
