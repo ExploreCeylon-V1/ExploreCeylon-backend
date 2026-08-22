@@ -4,9 +4,11 @@ import com.exploreceylon.backend.dto.destination.CreateDestinationRequest;
 import com.exploreceylon.backend.dto.destination.DestinationResponse;
 import com.exploreceylon.backend.model.Destination;
 import com.exploreceylon.backend.repository.DestinationRepository;
+import com.exploreceylon.backend.repository.Destinationreviewrepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -17,6 +19,7 @@ import java.util.stream.Collectors;
 public class DestinationService {
 
     private final DestinationRepository destinationRepository;
+    private final Destinationreviewrepository destinationReviewRepository;
 
     // ── Get All Destinations ───────────────────────────────
     public List<DestinationResponse> getAllDestinations(
@@ -187,10 +190,12 @@ public class DestinationService {
     }
 
     // ── Admin — Delete ─────────────────────────────────────
+    @Transactional
     public void delete(Long id) {
         Destination dest = destinationRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException(
                         "Destination not found: " + id));
+        destinationReviewRepository.deleteByDestinationId(id);
         destinationRepository.delete(dest);
         log.info("Destination permanently deleted: {}", id);
     }

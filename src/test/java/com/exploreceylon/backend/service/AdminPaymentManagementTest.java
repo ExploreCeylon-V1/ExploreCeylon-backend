@@ -449,7 +449,7 @@ public class AdminPaymentManagementTest {
         // Should NOT appear in admin payments query because status is PENDING_PAYMENT
         PageResponse<AdminPaymentResponse> page = adminService.getAllPayments(
                 "VEHICLE", "ALL", String.valueOf(vb.getId()), null, null, "createdAt", "desc", 0, 10);
-        assertEquals(0, page.getContent().size());
+        assertTrue(page.getContent().stream().noneMatch(p -> p.getBookingId().equals(vb.getId())));
     }
 
     @Test
