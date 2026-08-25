@@ -93,7 +93,7 @@ public class DefaultPlannerFacadeService implements PlannerFacadeService {
         int durationDays = Math.max(1, request.getTripDays());
         LocalDate startDate = request.getStartDate() != null ? request.getStartDate() : LocalDate.now();
         BudgetLevel budgetLevel = parseBudget(request.getBudget(), request.getSpecialNotes());
-        List<String> styles = request.getTravelStyle() != null ? List.of(request.getTravelStyle()) : List.of("BALANCED");
+        List<String> styles = extractTravelStyles(request);
 
         GeoPoint originPoint = itineraryAssemblyService.geocode(request.getOrigin())
                 .orElse(new GeoPoint(6.9271, 79.8612));
@@ -131,7 +131,7 @@ public class DefaultPlannerFacadeService implements PlannerFacadeService {
                     .origin(request.getOrigin())
                     .destination(request.getDestination())
                     .durationDays(durationDays)
-                    .travelStyle(styles.get(0))
+                    .travelStyle(String.join(", ", styles))
                     .days(List.of())
                     .build();
             return narrativeGenerationService.generateNarrative(narrativeRequest);
@@ -167,7 +167,7 @@ public class DefaultPlannerFacadeService implements PlannerFacadeService {
                 .origin(request.getOrigin())
                 .destination(request.getDestination())
                 .tripDays(durationDays)
-                .travelStyle(styles.get(0))
+                .travelStyle(String.join(", ", styles))
                 .budget(budgetLevel.name())
                 .groupSize(request.getGroupSize())
                 .overallScore(94.5)
@@ -267,5 +267,40 @@ public class DefaultPlannerFacadeService implements PlannerFacadeService {
     private int countStops(List<PlannedDay> days) {
         if (days == null) return 0;
         return days.stream().mapToInt(d -> d.stops() != null ? d.stops().size() : 0).sum();
+    }
+
+    private List<String> extractTravelStyles(PlannerRequest request) {
+        if (request == null) {
+            return List.of("BALANCED");
+        }
+
+        List<String> rawStyles = new ArrayList<>();
+        if (request.getPreferences() != null && !request.getPreferences().isEmpty()) {
+            for (String pref : request.getPreferences()) {
+                if (pref != null && !pref.isBlank()) {
+                    for (String part : pref.split(",")) {
+                        String clean = part.trim().toUpperCase(java.util.Locale.ROOT);
+                        if (!clean.isBlank() && !rawStyles.contains(clean)) {
+                            rawStyles.add(clean);
+                        }
+                    }
+                }
+            }
+        }
+
+        if (rawStyles.isEmpty() && request.getTravelStyle() != null && !request.getTravelStyle().isBlank()) {
+            for (String part : request.getTravelStyle().split(",")) {
+                String clean = part.trim().toUpperCase(java.util.Locale.ROOT);
+                if (!clean.isBlank() && !rawStyles.contains(clean)) {
+                    rawStyles.add(clean);
+                }
+            }
+        }
+
+        if (rawStyles.isEmpty()) {
+            return List.of("BALANCED");
+        }
+
+        return java.util.Collections.unmodifiableList(rawStyles);
     }
 }

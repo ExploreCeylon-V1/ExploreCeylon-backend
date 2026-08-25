@@ -86,4 +86,63 @@ class PlannerFacadeServiceTest {
         assertNotNull(response.getStatistics());
         assertEquals(100.0, response.getStatistics().getRouteMatrixReusePercentage());
     }
+
+    @Test
+    @DisplayName("Should extract full multi-select styles from preferences and pass all downstream")
+    void testGenerateItineraryWithMultiSelectPreferences() {
+        PlannerRequest request = PlannerRequest.builder()
+                .origin("Colombo")
+                .destination("Kandy")
+                .tripDays(3)
+                .budget("MID_RANGE")
+                .travelStyle("ADVENTURE")
+                .preferences(List.of("ADVENTURE", "CULTURAL", "WILDLIFE"))
+                .groupSize(2)
+                .startDate(LocalDate.of(2026, 9, 1))
+                .build();
+
+        PlannerResponse response = plannerFacadeService.generateItinerary(request);
+
+        assertNotNull(response);
+        assertEquals("ADVENTURE, CULTURAL, WILDLIFE", response.getSummary().getTravelStyle());
+    }
+
+    @Test
+    @DisplayName("Should parse comma-separated travelStyle when preferences is null or empty")
+    void testGenerateItineraryWithCommaSeparatedTravelStyle() {
+        PlannerRequest request = PlannerRequest.builder()
+                .origin("Colombo")
+                .destination("Kandy")
+                .tripDays(2)
+                .budget("MID_RANGE")
+                .travelStyle("ADVENTURE, CULTURAL")
+                .groupSize(2)
+                .startDate(LocalDate.of(2026, 9, 1))
+                .build();
+
+        PlannerResponse response = plannerFacadeService.generateItinerary(request);
+
+        assertNotNull(response);
+        assertEquals("ADVENTURE, CULTURAL", response.getSummary().getTravelStyle());
+    }
+
+    @Test
+    @DisplayName("Should fallback to BALANCED when preferences and travelStyle are both absent")
+    void testGenerateItineraryWithBalancedFallback() {
+        PlannerRequest request = PlannerRequest.builder()
+                .origin("Colombo")
+                .destination("Kandy")
+                .tripDays(2)
+                .budget("MID_RANGE")
+                .travelStyle(null)
+                .preferences(null)
+                .groupSize(2)
+                .startDate(LocalDate.of(2026, 9, 1))
+                .build();
+
+        PlannerResponse response = plannerFacadeService.generateItinerary(request);
+
+        assertNotNull(response);
+        assertEquals("BALANCED", response.getSummary().getTravelStyle());
+    }
 }

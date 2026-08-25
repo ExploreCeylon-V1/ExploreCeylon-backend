@@ -30,6 +30,11 @@ public class PlannerTripMapper {
         LocalDate end = start.plusDays(Math.max(0, request.getTripDays() - 1));
         double estBudget = response.getEstimatedCost() != null ? response.getEstimatedCost().getGrandTotal() : 0.0;
 
+        String primaryStyle = (request.getTravelStyle() != null && !request.getTravelStyle().isBlank())
+                ? request.getTravelStyle()
+                : ((request.getPreferences() != null && !request.getPreferences().isEmpty())
+                        ? request.getPreferences().get(0) : null);
+
         Trip trip = Trip.builder()
                 .user(user)
                 .title(request.getOrigin() + " to " + request.getDestination() + " Trip")
@@ -37,7 +42,7 @@ public class PlannerTripMapper {
                 .toLocation(request.getDestination())
                 .startDate(start)
                 .endDate(end)
-                .travelStyle(parseTravelStyle(request.getTravelStyle()))
+                .travelStyle(parseTravelStyle(primaryStyle))
                 .budgetRange(parseBudgetRange(request.getBudget()))
                 .groupSize(request.getGroupSize())
                 .budgetAmountLkr(estBudget) // Initializing Existing Budget Tracker Estimated Budget!
@@ -231,9 +236,10 @@ public class PlannerTripMapper {
     }
 
     private TravelStyle parseTravelStyle(String style) {
-        if (style == null) return TravelStyle.RELAXATION;
+        if (style == null || style.isBlank()) return TravelStyle.RELAXATION;
         try {
-            return TravelStyle.valueOf(style.toUpperCase());
+            String primary = style.split(",")[0].trim().toUpperCase(java.util.Locale.ROOT);
+            return TravelStyle.valueOf(primary);
         } catch (Exception e) {
             return TravelStyle.RELAXATION;
         }
