@@ -51,6 +51,8 @@ public class UserController {
         m.put("phoneVerified", Boolean.TRUE.equals(u.getPhoneVerified()));
         m.put("hasPassword",   u.getPassword() != null);
         m.put("authProvider",  u.getAuthProvider() != null ? u.getAuthProvider().name() : "LOCAL");
+        m.put("kycStatus",     u.getKycStatus() != null ? u.getKycStatus().name() : "NOT_SUBMITTED");
+        m.put("verificationStatus", u.getKycStatus() != null ? u.getKycStatus().name() : "NOT_SUBMITTED");
         return m;
     }
 

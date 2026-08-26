@@ -107,7 +107,9 @@ public class SecurityConfig {
                 .requestMatchers("/api/v1/payments/*/notify").permitAll() // PayHere webhooks
                 .requestMatchers("/api/v1/payments/**").authenticated()
                 .requestMatchers("/api/v1/guide-payments/**").hasRole("ADMIN")
+                .requestMatchers("/api/admin/verification/**", "/api/v1/admin/verification/**").hasRole("ADMIN")
                 .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
+                .requestMatchers("/api/verification/**", "/api/v1/verification/**").authenticated()
 
                 // Destinations: public read, admin-only write; nested reviews public read/auth post/admin delete
                 .requestMatchers(HttpMethod.POST, "/api/v1/destinations/*/reviews").authenticated()

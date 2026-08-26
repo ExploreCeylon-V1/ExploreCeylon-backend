@@ -28,6 +28,7 @@ public class TourGuideService {
     private final UserRepository         userRepository;
     private final TripRepository         tripRepository;
     private final BudgetService          budgetService;
+    private final UserVerificationService userVerificationService;
 
     // ── Current User ───────────────────────────────────────
     private User getCurrentUser() {
@@ -153,6 +154,10 @@ public class TourGuideService {
     // ── Book Guide ─────────────────────────────────────────
     public GuideBookingResponse bookGuide(BookGuideRequest req) {
         User user   = getCurrentUser();
+
+        // Enforce Identity Verification (KYC) gate
+        userVerificationService.assertApprovedForBooking(user);
+
         TourGuide guide = findGuide(req.getGuideId());
 
         // Calculate total cost
