@@ -23,13 +23,13 @@ public class OpeningHoursService {
         DestinationCategory category = destination.getCategory();
         return switch (category) {
             case RELIGIOUS -> new OperatingHours(360, 1140);        // 06:00 AM - 07:00 PM
-            case CULTURAL, HERITAGE -> new OperatingHours(510, 1050); // 08:30 AM - 05:30 PM
-            case WILDLIFE -> new OperatingHours(360, 1080);        // 06:00 AM - 06:00 PM
-            case HILL -> new OperatingHours(360, 1110);            // 06:00 AM - 06:30 PM
-            case BEACH, SURF -> new OperatingHours(360, 1140);     // 06:00 AM - 07:00 PM
-            case ADVENTURE -> new OperatingHours(480, 1020);       // 08:00 AM - 05:00 PM
-            case CITY -> new OperatingHours(540, 1200);            // 09:00 AM - 08:00 PM
-            default -> new OperatingHours(480, 1080);              // 08:00 AM - 06:00 PM
+            case CULTURE_HERITAGE -> new OperatingHours(510, 1050); // 08:30 AM - 05:30 PM
+            case WILDLIFE_NATURE -> new OperatingHours(360, 1080);  // 06:00 AM - 06:00 PM
+            case HILL_COUNTRY -> new OperatingHours(360, 1110);     // 06:00 AM - 06:30 PM
+            case BEACH_COAST -> new OperatingHours(360, 1140);      // 06:00 AM - 07:00 PM
+            case ADVENTURE -> new OperatingHours(480, 1020);        // 08:00 AM - 05:00 PM
+            case SCENIC_VIEWS -> new OperatingHours(360, 1110);     // 06:00 AM - 06:30 PM
+            case CITY_URBAN -> new OperatingHours(540, 1200);       // 09:00 AM - 08:00 PM
         };
     }
 }

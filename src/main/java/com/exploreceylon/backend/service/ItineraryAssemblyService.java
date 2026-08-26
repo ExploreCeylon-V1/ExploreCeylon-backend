@@ -117,25 +117,25 @@ public class ItineraryAssemblyService {
     // ── Per-category default visit durations (minutes), used when a
     // destination/gem's own visitDurationMinutes hasn't been backfilled.
     private static final Map<Destination.DestinationCategory, Integer> DEST_DEFAULT_MINUTES = mapOf(
-            Destination.DestinationCategory.BEACH,     90,
-            Destination.DestinationCategory.CULTURAL,  60,
-            Destination.DestinationCategory.WILDLIFE, 120,
-            Destination.DestinationCategory.HILL,      90,
-            Destination.DestinationCategory.SURF,      90,
-            Destination.DestinationCategory.ADVENTURE,120,
-            Destination.DestinationCategory.HERITAGE,  60,
-            Destination.DestinationCategory.RELIGIOUS, 45,
-            Destination.DestinationCategory.CITY,      60);
+            Destination.DestinationCategory.ADVENTURE,        120,
+            Destination.DestinationCategory.CULTURE_HERITAGE,  60,
+            Destination.DestinationCategory.RELIGIOUS,         45,
+            Destination.DestinationCategory.WILDLIFE_NATURE,  120,
+            Destination.DestinationCategory.BEACH_COAST,       90,
+            Destination.DestinationCategory.HILL_COUNTRY,      90,
+            Destination.DestinationCategory.SCENIC_VIEWS,      90,
+            Destination.DestinationCategory.CITY_URBAN,        60);
     private static final int DEST_DEFAULT_MINUTES_FALLBACK = 60;
 
     private static final Map<HiddenGem.GemCategory, Integer> GEM_DEFAULT_MINUTES = mapOf(
-            HiddenGem.GemCategory.BEACH,     90,
-            HiddenGem.GemCategory.WATERFALL, 60,
-            HiddenGem.GemCategory.RUINS,     45,
-            HiddenGem.GemCategory.VIEWPOINT, 90,
-            HiddenGem.GemCategory.VILLAGE,   45,
-            HiddenGem.GemCategory.CAFE,      30,
-            HiddenGem.GemCategory.TEMPLE,    45);
+            HiddenGem.GemCategory.ADVENTURE,        60,
+            HiddenGem.GemCategory.CULTURE_HERITAGE, 45,
+            HiddenGem.GemCategory.RELIGIOUS,        45,
+            HiddenGem.GemCategory.WILDLIFE_NATURE,  90,
+            HiddenGem.GemCategory.BEACH_COAST,      90,
+            HiddenGem.GemCategory.HILL_COUNTRY,     60,
+            HiddenGem.GemCategory.SCENIC_VIEWS,     90,
+            HiddenGem.GemCategory.CITY_URBAN,       30);
     private static final int GEM_DEFAULT_MINUTES_FALLBACK = 45;
 
     private static <K, V> Map<K, V> mapOf(Object... kv) {
@@ -202,12 +202,10 @@ public class ItineraryAssemblyService {
         return GEM_DEFAULT_MINUTES.getOrDefault(g.getCategory(), GEM_DEFAULT_MINUTES_FALLBACK);
     }
 
-    private boolean matchesStyle(String csvTags, Set<String> selectedStyles) {
-        if (csvTags == null || csvTags.isBlank() || selectedStyles.isEmpty()) return true;
-        Set<String> tags = Arrays.stream(csvTags.split(","))
-                .map(s -> s.trim().toUpperCase(Locale.ROOT))
-                .collect(Collectors.toSet());
-        return tags.stream().anyMatch(selectedStyles::contains);
+    private boolean matchesStyle(Enum<?> category, Set<String> selectedStyles) {
+        if (selectedStyles == null || selectedStyles.isEmpty()) return true;
+        if (category == null) return false;
+        return selectedStyles.contains(category.name());
     }
 
     private boolean matchesSeason(String csvMonths, Set<String> tripMonthNames) {
@@ -268,7 +266,7 @@ public class ItineraryAssemblyService {
                 .filter(d -> detourKm(origin, destination, d.getLatitude(), d.getLongitude()) <= maxDetour)
                 .filter(d -> !isBeyondDestination(origin, destination, d.getLatitude(), d.getLongitude(), directKm))
                 .filter(d -> isNearEndpoint(origin, destination, d.getLatitude(), d.getLongitude())
-                        || (matchesStyle(d.getTravelStyleTags(), selectedStyles)
+                        || (matchesStyle(d.getCategory(), selectedStyles)
                             && matchesSeason(d.getBestMonths(), tripMonths)))
                 .collect(Collectors.toList());
 
@@ -313,7 +311,7 @@ public class ItineraryAssemblyService {
                 .filter(g -> detourKm(origin, destination, g.getLatitude(), g.getLongitude()) <= maxDetour)
                 .filter(g -> !isBeyondDestination(origin, destination, g.getLatitude(), g.getLongitude(), directKm))
                 .filter(g -> isNearEndpoint(origin, destination, g.getLatitude(), g.getLongitude())
-                        || (matchesStyle(g.getTravelStyleTags(), selectedStyles)
+                        || (matchesStyle(g.getCategory(), selectedStyles)
                             && matchesSeason(g.getSeasonMonths(), tripMonths)))
                 .collect(Collectors.toList());
 

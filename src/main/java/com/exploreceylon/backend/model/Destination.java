@@ -119,12 +119,13 @@ public class Destination {
     }
 
     public enum DestinationCategory {
-        // Existing categories
-        BEACH, CULTURAL, WILDLIFE, HILL,
-        SURF, ADVENTURE, HERITAGE, RELIGIOUS, CITY,
-
-        // Unified 8-category set (Phase 1 additive)
-        CULTURE_HERITAGE, WILDLIFE_NATURE, BEACH_COAST,
-        HILL_COUNTRY, SCENIC_VIEWS, CITY_URBAN
+        ADVENTURE,
+        CULTURE_HERITAGE,
+        RELIGIOUS,
+        WILDLIFE_NATURE,
+        BEACH_COAST,
+        HILL_COUNTRY,
+        SCENIC_VIEWS,
+        CITY_URBAN
     }
 }

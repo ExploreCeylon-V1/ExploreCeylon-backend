@@ -38,7 +38,7 @@ class DestinationControllerIntegrationTest {
                 .district("Matale")
                 .province("Central")
                 .description("Ancient rock fortress")
-                .category(Destination.DestinationCategory.HERITAGE)
+                .category(Destination.DestinationCategory.CULTURE_HERITAGE)
                 .active(true)
                 .build();
         sigiriyaId = destinations.save(sigiriya).getId();
@@ -48,7 +48,7 @@ class DestinationControllerIntegrationTest {
                 .district("Matara")
                 .province("Southern")
                 .description("Popular beach town")
-                .category(Destination.DestinationCategory.BEACH)
+                .category(Destination.DestinationCategory.BEACH_COAST)
                 .active(true)
                 .build();
         destinations.save(mirissa);
@@ -68,12 +68,12 @@ class DestinationControllerIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(sigiriyaId))
                 .andExpect(jsonPath("$.name").value("Sigiriya"))
-                .andExpect(jsonPath("$.category").value("HERITAGE"));
+                .andExpect(jsonPath("$.category").value("CULTURE_HERITAGE"));
     }
 
     @Test
     void getAll_filteredByCategory_noAuth_returnsMatchingOnly() throws Exception {
-        mvc.perform(get(BASE).param("category", "BEACH"))
+        mvc.perform(get(BASE).param("category", "BEACH_COAST"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(1))
                 .andExpect(jsonPath("$[0].name").value("Mirissa"));

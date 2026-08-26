@@ -154,6 +154,14 @@ public class DefaultDestinationRankingEngine implements DestinationRankingEngine
 
         if (targetStyles.isEmpty()) return styleWeight * 0.5;
 
+        if (destination.getCategory() != null) {
+            String catName = destination.getCategory().name().toUpperCase(Locale.ROOT);
+            if (targetStyles.contains(catName)) {
+                if (matchingStylesOutput != null) matchingStylesOutput.add(catName);
+                return styleWeight; // 100% — category is the authoritative unified match
+            }
+        }
+
         String csvTags = destination.getTravelStyleTags();
         if (csvTags != null && !csvTags.isBlank()) {
             Set<String> destTags = Arrays.stream(csvTags.split(","))
@@ -164,15 +172,7 @@ public class DefaultDestinationRankingEngine implements DestinationRankingEngine
                     .collect(Collectors.toSet());
             if (!matches.isEmpty()) {
                 if (matchingStylesOutput != null) matchingStylesOutput.addAll(matches);
-                return styleWeight; // 100% style match
-            }
-        }
-
-        if (destination.getCategory() != null) {
-            String catName = destination.getCategory().name().toUpperCase(Locale.ROOT);
-            if (targetStyles.contains(catName)) {
-                if (matchingStylesOutput != null) matchingStylesOutput.add(catName);
-                return styleWeight * 0.75; // 75% partial category match
+                return styleWeight * 0.75; // 75% secondary/legacy-tag signal
             }
         }
 

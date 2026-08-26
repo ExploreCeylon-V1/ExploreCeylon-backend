@@ -27,9 +27,9 @@ class DayBudgetEngineTest {
     @DisplayName("Should estimate visit durations accurately based on destination categories")
     void testVisitDurationEstimator() {
         assertEquals(45, durationEstimator.estimateMinutes(DestinationCategory.RELIGIOUS));
-        assertEquals(60, durationEstimator.estimateMinutes(DestinationCategory.CULTURAL));
-        assertEquals(90, durationEstimator.estimateMinutes(DestinationCategory.BEACH));
-        assertEquals(180, durationEstimator.estimateMinutes(DestinationCategory.WILDLIFE));
+        assertEquals(60, durationEstimator.estimateMinutes(DestinationCategory.CULTURE_HERITAGE));
+        assertEquals(90, durationEstimator.estimateMinutes(DestinationCategory.BEACH_COAST));
+        assertEquals(180, durationEstimator.estimateMinutes(DestinationCategory.WILDLIFE_NATURE));
         assertEquals(150, durationEstimator.estimateMinutes(DestinationCategory.ADVENTURE));
     }
 

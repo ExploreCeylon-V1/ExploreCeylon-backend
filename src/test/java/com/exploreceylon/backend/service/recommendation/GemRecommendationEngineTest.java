@@ -41,8 +41,8 @@ class GemRecommendationEngineTest {
     void testRecommendGemsAndEvents() {
         GeoPoint colombo = new GeoPoint(6.9271, 79.8612);
 
-        HiddenGem gem1 = HiddenGem.builder().id(101L).title("Bopath Ella Waterfall").category(HiddenGem.GemCategory.WATERFALL).rating(4.6).reviewCount(25).latitude(6.7844).longitude(80.3644).build();
-        HiddenGem gem2 = HiddenGem.builder().id(102L).title("Low quality gem").category(HiddenGem.GemCategory.WATERFALL).rating(3.2).reviewCount(2).latitude(6.7000).longitude(80.3000).build();
+        HiddenGem gem1 = HiddenGem.builder().id(101L).title("Bopath Ella Waterfall").category(HiddenGem.GemCategory.ADVENTURE).rating(4.6).reviewCount(25).latitude(6.7844).longitude(80.3644).build();
+        HiddenGem gem2 = HiddenGem.builder().id(102L).title("Low quality gem").category(HiddenGem.GemCategory.ADVENTURE).rating(3.2).reviewCount(2).latitude(6.7000).longitude(80.3000).build();
 
         Event event1 = Event.builder().id(201L).title("Kandy Esala Perahera").startDate(LocalDate.of(2026, 8, 1)).endDate(LocalDate.of(2026, 8, 15)).latitude(7.2906).longitude(80.6337).build();
 

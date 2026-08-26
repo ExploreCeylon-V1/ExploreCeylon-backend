@@ -32,9 +32,9 @@ public class PreferredVisitWindowService {
 
         if (category == DestinationCategory.RELIGIOUS) {
             return new VisitWindow(420, 660, "MORNING_TEMPLE"); // 07:00 AM - 11:00 AM
-        } else if (category == DestinationCategory.BEACH || category == DestinationCategory.SURF) {
+        } else if (category == DestinationCategory.BEACH_COAST) {
             return new VisitWindow(900, 1140, "LATE_AFTERNOON"); // 03:00 PM - 07:00 PM
-        } else if (category == DestinationCategory.WILDLIFE) {
+        } else if (category == DestinationCategory.WILDLIFE_NATURE) {
             return new VisitWindow(360, 600, "MORNING_SAFARI"); // 06:00 AM - 10:00 AM
         }
 
