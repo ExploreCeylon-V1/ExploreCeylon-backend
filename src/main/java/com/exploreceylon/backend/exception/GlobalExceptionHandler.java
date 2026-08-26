@@ -53,6 +53,19 @@ public class GlobalExceptionHandler {
                 .body(Map.of("error", "Forbidden", "message", ex.getMessage()));
     }
 
+    // KYC Verification Gate (403)
+    @ExceptionHandler(KycVerificationException.class)
+    public ResponseEntity<Map<String, Object>> handleKycVerification(KycVerificationException ex) {
+        Map<String, Object> body = new HashMap<>();
+        body.put("error", "Forbidden");
+        body.put("code", ex.getCode());
+        body.put("message", ex.getMessage());
+        if (ex.getRejectionReason() != null) {
+            body.put("rejectionReason", ex.getRejectionReason());
+        }
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(body);
+    }
+
     // Resource Not Found (404)
     @ExceptionHandler(ResourceNotFoundException.class)
     public ResponseEntity<Map<String, String>> handleNotFound(ResourceNotFoundException ex) {

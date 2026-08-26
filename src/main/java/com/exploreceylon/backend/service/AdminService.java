@@ -520,6 +520,7 @@ public class AdminService {
         res.setActive(Boolean.TRUE.equals(u.getActive()));
         res.setEmailVerified(Boolean.TRUE.equals(u.getEmailVerified()));
         res.setPhoneVerified(Boolean.TRUE.equals(u.getPhoneVerified()));
+        res.setKycStatus(u.getKycStatus() != null ? u.getKycStatus() : User.KycStatus.NOT_SUBMITTED);
         res.setTripCount(tripRepository.countByUserId(u.getId()));
         res.setVehicleBookingCount(vehicleBookingRepository.findByUserIdOrderByCreatedAtDesc(u.getId()).size());
         res.setGuideBookingCount(guideBookingRepository.findByUserIdOrderByCreatedAtDesc(u.getId()).size());
@@ -557,6 +558,7 @@ public class AdminService {
             res.setActive(Boolean.TRUE.equals(u.getActive()));
             res.setEmailVerified(Boolean.TRUE.equals(u.getEmailVerified()));
             res.setPhoneVerified(Boolean.TRUE.equals(u.getPhoneVerified()));
+            res.setKycStatus(u.getKycStatus() != null ? u.getKycStatus() : User.KycStatus.NOT_SUBMITTED);
             res.setTripCount(tripCounts.getOrDefault(u.getId(), 0L));
             res.setVehicleBookingCount(vehicleBookingCounts.getOrDefault(u.getId(), 0L));
             res.setGuideBookingCount(guideBookingCounts.getOrDefault(u.getId(), 0L));

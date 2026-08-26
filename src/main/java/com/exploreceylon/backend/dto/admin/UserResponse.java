@@ -17,6 +17,7 @@ public class UserResponse {
     private boolean active;
     private boolean emailVerified;
     private boolean phoneVerified;
+    private User.KycStatus kycStatus;
     private long tripCount;
     private long vehicleBookingCount;
     private long guideBookingCount;

@@ -56,6 +56,22 @@ public class TripController {
                 tripService.updateTripDay(tripId, dayId, request));
     }
 
+    // POST /api/v1/trips/{id}/days — Add day (append only)
+    @PostMapping("/{id}/days")
+    public ResponseEntity<TripResponse> addDay(
+            @PathVariable Long id,
+            @Valid @RequestBody AddDayRequest request) {
+        return ResponseEntity.ok(tripService.addDayToTrip(id, request));
+    }
+
+    // DELETE /api/v1/trips/{tripId}/days/{dayId} — Remove day (last day only)
+    @DeleteMapping("/{tripId}/days/{dayId}")
+    public ResponseEntity<TripResponse> removeDay(
+            @PathVariable Long tripId,
+            @PathVariable Long dayId) {
+        return ResponseEntity.ok(tripService.removeLastDay(tripId, dayId));
+    }
+
     // PATCH /api/v1/trips/{id}/title
     @PatchMapping("/{id}/title")
     public ResponseEntity<TripResponse> updateTitle(

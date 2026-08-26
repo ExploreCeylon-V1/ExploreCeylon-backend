@@ -40,6 +40,24 @@ public class EmailSenderService {
         send(toAddress, "Your Explore Ceylon verification code", text, html);
     }
 
+    /**
+     * Sends the KYC approval confirmation email.
+     */
+    public void sendKycApproved(String toAddress, String recipientName) {
+        String html = EmailTemplates.kycApprovedHtml(recipientName);
+        String text = EmailTemplates.kycApprovedPlainText(recipientName);
+        send(toAddress, "Your Identity Verification is Approved! - Explore Ceylon", text, html);
+    }
+
+    /**
+     * Sends the KYC rejection email with the specified reason.
+     */
+    public void sendKycRejected(String toAddress, String recipientName, String reason) {
+        String html = EmailTemplates.kycRejectedHtml(recipientName, reason);
+        String text = EmailTemplates.kycRejectedPlainText(recipientName, reason);
+        send(toAddress, "Identity Verification Update - Explore Ceylon", text, html);
+    }
+
     private void send(String toAddress, String subject, String plainText, String html) {
         if (fromAddress == null || fromAddress.isBlank()) {
             throw new EmailDeliveryException("Email delivery is not configured on this server.");

@@ -27,6 +27,7 @@ public class VehicleBookingService {
     private final UserRepository           userRepository;
     private final TripRepository           tripRepository;
     private final BudgetService            budgetService;
+    private final UserVerificationService  userVerificationService;
 
     // ── Current User ───────────────────────────────────────
     private User getCurrentUser() {
@@ -39,6 +40,9 @@ public class VehicleBookingService {
     // ── Book Vehicle ───────────────────────────────────────
     public VehicleBookingResponse bookVehicle(BookVehicleRequest req) {
         User user = getCurrentUser();
+
+        // Enforce Identity Verification (KYC) gate
+        userVerificationService.assertApprovedForBooking(user);
 
         // Get vehicle
         Vehicle vehicle = vehicleRepository.findById(req.getVehicleId())

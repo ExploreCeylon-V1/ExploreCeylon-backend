@@ -72,9 +72,19 @@ class VehicleBookingControllerIntegrationTest {
     }
 
     private String registerAndLogin(String email) throws Exception {
+        return registerAndLogin(email, true);
+    }
+
+    private String registerAndLogin(String email, boolean approveKyc) throws Exception {
         mvc.perform(post(REGISTER).contentType(APPLICATION_JSON)
                         .content("{\"name\":\"Test User\",\"email\":\"" + email + "\",\"password\":\"StrongPass1\"}"))
                 .andExpect(status().isOk());
+
+        if (approveKyc) {
+            User u = users.findByEmail(email).orElseThrow();
+            u.setKycStatus(User.KycStatus.APPROVED);
+            users.save(u);
+        }
 
         MvcResult loginResult = mvc.perform(post(LOGIN).contentType(APPLICATION_JSON)
                         .content("{\"email\":\"" + email + "\",\"password\":\"StrongPass1\"}"))
@@ -103,6 +113,17 @@ class VehicleBookingControllerIntegrationTest {
                 .andExpect(status().isOk());
 
         assertEquals(1, bookings.count());
+    }
+
+    @Test
+    void bookVehicle_withoutKycApproval_isForbidden() throws Exception {
+        String token = registerAndLogin("unverified@example.com", false);
+
+        mvc.perform(post(BOOKINGS)
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(APPLICATION_JSON)
+                        .content(bookVehicleJson()))
+                .andExpect(status().isForbidden());
     }
 
     @Test
