@@ -31,8 +31,8 @@ public class ChatHandshakeInterceptor implements HandshakeInterceptor {
         String token = UriComponentsBuilder.fromUri(request.getURI())
                 .build().getQueryParams().getFirst("token");
 
-        if (token == null || token.isBlank()) {
-            log.warn("Chat WS handshake rejected: no token");
+        if (token == null || token.isBlank() || "null".equalsIgnoreCase(token) || "undefined".equalsIgnoreCase(token)) {
+            log.warn("Chat WS handshake rejected: no valid token");
             return false;
         }
 
