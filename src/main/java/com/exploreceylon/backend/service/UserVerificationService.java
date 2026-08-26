@@ -19,9 +19,11 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
+import com.exploreceylon.backend.specification.UserVerificationSpecifications;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
@@ -179,8 +181,8 @@ public class UserVerificationService {
         Sort.Direction direction = "asc".equalsIgnoreCase(sortDir) ? Sort.Direction.ASC : Sort.Direction.DESC;
         Pageable pageable = PageRequest.of(page, size, Sort.by(direction, sortProperty));
 
-        String searchPattern = (search != null && !search.isBlank()) ? search.trim() : null;
-        Page<UserVerification> resultPage = verificationRepository.findAllFiltered(status, searchPattern, pageable);
+        Specification<UserVerification> spec = UserVerificationSpecifications.withFilters(status, search);
+        Page<UserVerification> resultPage = verificationRepository.findAll(spec, pageable);
 
         var content = resultPage.getContent().stream()
                 .map(this::toAdminResponse)

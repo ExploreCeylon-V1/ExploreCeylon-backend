@@ -21,14 +21,4 @@ public interface UserVerificationRepository extends JpaRepository<UserVerificati
     boolean existsByUserIdAndStatus(Long userId, VerificationStatus status);
 
     long countByStatus(VerificationStatus status);
-
-    @Query("SELECT uv FROM UserVerification uv JOIN uv.user u " +
-           "WHERE (:status IS NULL OR uv.status = :status) " +
-           "AND (:search IS NULL OR LOWER(u.name) LIKE LOWER(CONCAT('%', :search, '%')) " +
-           "OR LOWER(u.email) LIKE LOWER(CONCAT('%', :search, '%')) " +
-           "OR LOWER(uv.nationality) LIKE LOWER(CONCAT('%', :search, '%')))")
-    Page<UserVerification> findAllFiltered(
-            @Param("status") VerificationStatus status,
-            @Param("search") String search,
-            Pageable pageable);
 }

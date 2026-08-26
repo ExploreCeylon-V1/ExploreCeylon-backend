@@ -292,7 +292,28 @@ class KycVerificationIntegrationTest {
         JsonNode submitJson = mapper.readTree(submitResult.getResponse().getContentAsString());
         String verificationId = submitJson.get("verificationId").asText();
 
-        // 2. Admin queries list
+        // 2. Admin queries list (default / no filter)
+        mvc.perform(get("/api/v1/admin/verification")
+                        .header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content.length()").value(1))
+                .andExpect(jsonPath("$.content[0].userName").value("Applicant User"));
+
+        // 2b. Admin queries with status=ALL
+        mvc.perform(get("/api/v1/admin/verification")
+                        .header("Authorization", "Bearer " + adminToken)
+                        .param("status", "ALL"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content.length()").value(1));
+
+        // 2c. Admin queries with search
+        mvc.perform(get("/api/v1/admin/verification")
+                        .header("Authorization", "Bearer " + adminToken)
+                        .param("search", "Australia"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content.length()").value(1));
+
+        // 2d. Admin queries with status=PENDING
         mvc.perform(get("/api/v1/admin/verification")
                         .header("Authorization", "Bearer " + adminToken)
                         .param("status", "PENDING"))

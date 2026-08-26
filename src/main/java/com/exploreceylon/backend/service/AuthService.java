@@ -230,6 +230,7 @@ public class AuthService {
                 .name(user.getName())
                 .email(user.getEmail())
                 .role(user.getRole().name())
+                .kycStatus(user.getKycStatus() != null ? user.getKycStatus().name() : "NOT_SUBMITTED")
                 .build();
     }
 }
