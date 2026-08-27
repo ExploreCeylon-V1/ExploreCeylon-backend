@@ -73,7 +73,7 @@ public class ItineraryAssemblyService {
     // already trivially passes the detour/overshoot filters by geometry
     // (detour ≈ 0), so it isn't at risk of being wrongly excluded, and
     // bypassing style there would just pad Day 1 with off-theme content.
-    private static final double ENDPOINT_BYPASS_RADIUS_KM = 10.0;
+    private static final double ENDPOINT_BYPASS_RADIUS_KM = 25.0;
 
     // How far a candidate is allowed to project past the destination
     // along the origin→destination corridor direction before it's
@@ -228,7 +228,11 @@ public class ItineraryAssemblyService {
     }
 
     /** Candidate pool: corridor + budget/style/season filtered destinations and gems. */
-    public record CandidatePool(List<Destination> destinations, List<HiddenGem> gems) {}
+    public record CandidatePool(List<Destination> destinations, List<HiddenGem> gems, String originDistrict, String destinationDistrict) {
+        public CandidatePool(List<Destination> destinations, List<HiddenGem> gems) {
+            this(destinations, gems, null, null);
+        }
+    }
 
     /** Trip day containing assigned destinations, hidden gems, and events. */
     public record TripDay(int dayNumber, List<Destination> destinations, List<HiddenGem> gems, List<Event> events) {}
@@ -248,13 +252,8 @@ public class ItineraryAssemblyService {
         double coarseRadiusKm = directKm / 2.0 + maxDetour;
 
         String budgetParam = budgetLevel != null ? budgetLevel.name() : "";
-        CompletableFuture<List<Destination>> destFuture = java.util.concurrent.CompletableFuture.supplyAsync(
-                () -> destinationRepository.findWithinRadius(midLat, midLng, coarseRadiusKm, budgetParam));
-        CompletableFuture<List<HiddenGem>> gemFuture = java.util.concurrent.CompletableFuture.supplyAsync(
-                () -> hiddenGemRepository.findWithinRadius(midLat, midLng, coarseRadiusKm, budgetParam));
-
-        List<Destination> destCandidates = destFuture.join();
-        List<HiddenGem> gemCandidates = gemFuture.join();
+        List<Destination> destCandidates = destinationRepository.findWithinRadius(midLat, midLng, coarseRadiusKm, budgetParam);
+        List<HiddenGem> gemCandidates = hiddenGemRepository.findWithinRadius(midLat, midLng, coarseRadiusKm, budgetParam);
 
         Set<String> selectedStyles = travelStyles == null ? Set.of() : travelStyles.stream()
                 .filter(s -> s != null && !s.isBlank())
@@ -262,12 +261,18 @@ public class ItineraryAssemblyService {
                 .collect(Collectors.toSet());
         Set<String> tripMonths = monthNamesBetween(startDate, endDate);
 
+        String originDistrict = resolveDistrictAtPoint(origin, destCandidates);
+        String destinationDistrict = resolveDistrictAtPoint(destination, destCandidates);
+        boolean isInterDistrict = directKm > 25.0
+                && (originDistrict == null || destinationDistrict == null || !originDistrict.equalsIgnoreCase(destinationDistrict));
+
         List<Destination> filteredDest = destCandidates.stream()
                 .filter(d -> detourKm(origin, destination, d.getLatitude(), d.getLongitude()) <= maxDetour)
-                .filter(d -> !isBeyondDestination(origin, destination, d.getLatitude(), d.getLongitude(), directKm))
-                .filter(d -> isNearEndpoint(origin, destination, d.getLatitude(), d.getLongitude())
+                .filter(d -> !isBeyondDestination(origin, destination, d.getLatitude(), d.getLongitude(), directKm, d.getDistrict(), destinationDistrict))
+                .filter(d -> isNearEndpoint(origin, destination, d.getLatitude(), d.getLongitude(), d.getDistrict(), destinationDistrict)
                         || (matchesStyle(d.getCategory(), selectedStyles)
                             && matchesSeason(d.getBestMonths(), tripMonths)))
+                .filter(d -> !(isInterDistrict && originDistrict != null && d.getDistrict() != null && d.getDistrict().equalsIgnoreCase(originDistrict)))
                 .collect(Collectors.toList());
 
         RankingContext poolContext = RankingContext.builder()
@@ -287,7 +292,12 @@ public class ItineraryAssemblyService {
                 com.exploreceylon.backend.service.corridor.CorridorContext.builder()
                         .origin(origin)
                         .destination(destination)
+                        .originDistrict(originDistrict)
+                        .destinationDistrict(destinationDistrict)
                         .encodedPolyline(polyline)
+                        .intermediateWidthKm(polyline != null ? 8.0 : 30.0)
+                        .destinationZoneWidthKm(30.0)
+                        .destinationZoneRadiusKm(25.0)
                         .maxDetourKm(maxDetour)
                         .corridorEnabled(true)
                         .build()
@@ -309,17 +319,18 @@ public class ItineraryAssemblyService {
 
         List<HiddenGem> filteredGems = gemCandidates.stream()
                 .filter(g -> detourKm(origin, destination, g.getLatitude(), g.getLongitude()) <= maxDetour)
-                .filter(g -> !isBeyondDestination(origin, destination, g.getLatitude(), g.getLongitude(), directKm))
-                .filter(g -> isNearEndpoint(origin, destination, g.getLatitude(), g.getLongitude())
+                .filter(g -> !isBeyondDestination(origin, destination, g.getLatitude(), g.getLongitude(), directKm, g.getDistrict(), destinationDistrict))
+                .filter(g -> isNearEndpoint(origin, destination, g.getLatitude(), g.getLongitude(), g.getDistrict(), destinationDistrict)
                         || (matchesStyle(g.getCategory(), selectedStyles)
                             && matchesSeason(g.getSeasonMonths(), tripMonths)))
+                .filter(g -> !(isInterDistrict && originDistrict != null && g.getDistrict() != null && g.getDistrict().equalsIgnoreCase(originDistrict)))
                 .collect(Collectors.toList());
 
         log.info("Corridor pool: {} destinations, {} gems within {}km detour "
                 + "(coarse radius {}km around midpoint)",
                 rankedDest.size(), filteredGems.size(), maxDetour, coarseRadiusKm);
 
-        return new CandidatePool(rankedDest, filteredGems);
+        return new CandidatePool(rankedDest, filteredGems, originDistrict, destinationDistrict);
     }
 
     private double detourKm(GeoPoint origin, GeoPoint destination, Double lat, Double lng) {
@@ -350,16 +361,23 @@ public class ItineraryAssemblyService {
     }
 
     private boolean isBeyondDestination(GeoPoint origin, GeoPoint destination,
-                                         Double lat, Double lng, double directKm) {
+                                         Double lat, Double lng, double directKm,
+                                         String candDistrict, String destDistrict) {
         if (lat == null || lng == null) return true;
+        double distToDest = GeoUtils.distanceKm(destination.lat(), destination.lng(), lat, lng);
+        if (distToDest <= ENDPOINT_BYPASS_RADIUS_KM) return false;
+        if (destDistrict != null && candDistrict != null && candDistrict.equalsIgnoreCase(destDistrict) && distToDest <= 35.0) return false;
         double projectionKm = GeoUtils.projectionAlongCorridorKm(
                 origin.lat(), origin.lng(), destination.lat(), destination.lng(), lat, lng);
         return projectionKm > directKm + OVERSHOOT_TOLERANCE_KM;
     }
 
-    private boolean isNearEndpoint(GeoPoint origin, GeoPoint destination, Double lat, Double lng) {
+    private boolean isNearEndpoint(GeoPoint origin, GeoPoint destination, Double lat, Double lng,
+                                    String candDistrict, String destDistrict) {
         if (lat == null || lng == null) return false;
-        return GeoUtils.distanceKm(destination.lat(), destination.lng(), lat, lng) <= ENDPOINT_BYPASS_RADIUS_KM;
+        double dist = GeoUtils.distanceKm(destination.lat(), destination.lng(), lat, lng);
+        if (dist <= ENDPOINT_BYPASS_RADIUS_KM) return true;
+        return destDistrict != null && candDistrict != null && candDistrict.equalsIgnoreCase(destDistrict) && dist <= 35.0;
     }
 
     private int targetGemCount(int totalDays) {
@@ -415,8 +433,8 @@ public class ItineraryAssemblyService {
                         .destination(destination)
                         .build();
 
-        String originDistrict = resolveDistrictAtPoint(origin, pool.destinations());
-        String destinationDistrict = resolveDistrictAtPoint(destination, pool.destinations());
+        String originDistrict = pool.originDistrict() != null ? pool.originDistrict() : resolveDistrictAtPoint(origin, pool.destinations());
+        String destinationDistrict = pool.destinationDistrict() != null ? pool.destinationDistrict() : resolveDistrictAtPoint(destination, pool.destinations());
 
         boolean isInterDistrict = totalCorridorDist > 25.0
                 && (originDistrict == null || destinationDistrict == null || !originDistrict.equalsIgnoreCase(destinationDistrict));
@@ -451,9 +469,9 @@ public class ItineraryAssemblyService {
             double targetMaxProgressRatio = (double) currentDayNum / tripDurationDays + 0.15;
             if (currentDayNum == 1) {
                 targetMinProgressRatio = 0.0;
-                targetMaxProgressRatio = Math.max(0.35, 1.0 / tripDurationDays + 0.10);
+                targetMaxProgressRatio = Math.max(0.50, 1.0 / tripDurationDays + 0.15);
             } else if (currentDayNum == tripDurationDays) {
-                targetMinProgressRatio = Math.min(0.60, (double) (tripDurationDays - 1) / tripDurationDays - 0.10);
+                targetMinProgressRatio = Math.min(0.50, (double) (tripDurationDays - 1) / tripDurationDays - 0.10);
                 targetMaxProgressRatio = 1.0;
             }
 
@@ -465,11 +483,9 @@ public class ItineraryAssemblyService {
                 if (d.getLatitude() == null || d.getLongitude() == null) continue;
                 String candDistrict = d.getDistrict();
 
-                // Inter-District Scenario: Strictly exclude origin district on Day 2+ or once origin stop cap (1) reached
+                // Multi-District Scenario (going through several districts): Do not consider places in the starting district
                 if (isInterDistrict && originDistrict != null && candDistrict != null && candDistrict.equalsIgnoreCase(originDistrict)) {
-                    if (currentDayNum > 1 || originDistrictStopsInTrip >= 1) {
-                        continue;
-                    }
+                    continue;
                 }
 
                 double dist = GeoUtils.distanceKm(curLat, curLng, d.getLatitude(), d.getLongitude());
@@ -591,7 +607,8 @@ public class ItineraryAssemblyService {
             if (bestCandidate.getDistrict() != null && originDistrict != null && bestCandidate.getDistrict().equalsIgnoreCase(originDistrict)) {
                 originDistrictStopsInTrip++;
             }
-            if (bestDist > MAX_INTER_DAY_JUMP_KM) {
+            double maxAllowedJump = (currentBin.isEmpty() && isInterDistrict) ? 160.0 : MAX_INTER_DAY_JUMP_KM;
+            if (bestDist > maxAllowedJump) {
                 remaining.remove(bestCandidate);
                 continue;
             }
@@ -627,13 +644,27 @@ public class ItineraryAssemblyService {
         // ── Guarantee the trip actually arrives at its destination ─────
         boolean destinationAlreadyIncluded = dayBins.stream().flatMap(List::stream)
                 .anyMatch(d -> GeoUtils.distanceKm(destination.lat(), destination.lng(),
-                        d.getLatitude(), d.getLongitude()) <= ENDPOINT_BYPASS_RADIUS_KM);
+                        d.getLatitude(), d.getLongitude()) <= ENDPOINT_BYPASS_RADIUS_KM
+                        || (destinationDistrict != null && d.getDistrict() != null && d.getDistrict().equalsIgnoreCase(destinationDistrict)));
         if (!destinationAlreadyIncluded) {
             pool.destinations().stream()
                     .filter(d -> GeoUtils.distanceKm(destination.lat(), destination.lng(),
-                            d.getLatitude(), d.getLongitude()) <= ENDPOINT_BYPASS_RADIUS_KM)
+                            d.getLatitude(), d.getLongitude()) <= ENDPOINT_BYPASS_RADIUS_KM
+                            || (destinationDistrict != null && d.getDistrict() != null && d.getDistrict().equalsIgnoreCase(destinationDistrict)))
                     .findFirst()
                     .ifPresent(d -> dayBins.get(tripDurationDays - 1).add(d));
+        }
+
+        // If final day is empty but prior days have surplus stops, balance into the final day
+        if (tripDurationDays > 1 && dayBins.get(tripDurationDays - 1).isEmpty()) {
+            for (int i = tripDurationDays - 2; i >= 0; i--) {
+                List<Destination> priorBin = dayBins.get(i);
+                if (priorBin.size() > 1) {
+                    Destination lastStop = priorBin.remove(priorBin.size() - 1);
+                    dayBins.get(tripDurationDays - 1).add(lastStop);
+                    break;
+                }
+            }
         }
 
         int gemTarget = Math.min(targetGemCount(tripDurationDays), pool.gems().size());
@@ -697,7 +728,7 @@ public class ItineraryAssemblyService {
                 for (HiddenGem g : availableGems) {
                     if (g.getLatitude() == null || g.getLongitude() == null) continue;
                     if (isInterDistrict && originDistrict != null && g.getDistrict() != null && g.getDistrict().equalsIgnoreCase(originDistrict)) {
-                        if (dayIdx > 0 || originDistrictStopsInTrip >= 1) continue;
+                        continue;
                     }
                     double dist = GeoUtils.distanceKm(lat, lng, g.getLatitude(), g.getLongitude());
                     if (dist <= MAX_INTER_DAY_JUMP_KM && dist < bestGemDist) {
