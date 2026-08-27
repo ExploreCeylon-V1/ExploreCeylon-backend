@@ -81,6 +81,7 @@ public class AdminVehicleController {
         vehicle.setDriverPhone(request.getDriverPhone());
         vehicle.setWhatsappNumber(request.getWhatsappNumber());
         vehicle.setDriverLanguages(request.getDriverLanguages());
+        vehicle.setEmail(request.getEmail());
         vehicle.setDriverIncluded(request.getDriverIncluded());
         vehicle.setAvailable(request.getAvailable());
         vehicle.setDescription(request.getDescription());

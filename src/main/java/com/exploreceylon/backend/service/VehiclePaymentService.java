@@ -1,5 +1,6 @@
 package com.exploreceylon.backend.service;
 
+import com.exploreceylon.backend.dto.email.BookingConfirmationDetails;
 import com.exploreceylon.backend.dto.payment.*;
 import com.exploreceylon.backend.exception.ForbiddenException;
 import com.exploreceylon.backend.exception.UnauthenticatedException;
@@ -27,6 +28,7 @@ public class VehiclePaymentService {
     private final VehicleBookingRepository vehicleBookingRepo;
     private final UserRepository           userRepo;
     private final PayHereService           payHereService;
+    private final EmailSenderService       emailSenderService;
 
     // ── Step 1: Initiate payment ──────────────────────────
     @Transactional
@@ -97,6 +99,7 @@ public class VehiclePaymentService {
             payment.setPaidAt(LocalDateTime.now());
 
             VehicleBooking booking = payment.getVehicleBooking();
+            BookingStatus prevStatus = booking.getStatus();
             if (payment.getPaymentPhase() == PaymentPhase.ADVANCE) {
                 booking.setStatus(BookingStatus.CONFIRMED);
                 log.info("Vehicle booking {} → CONFIRMED (20% advance paid)", booking.getId());
@@ -105,6 +108,10 @@ public class VehiclePaymentService {
                 log.info("Vehicle booking {} → COMPLETED (80% balance paid)", booking.getId());
             }
             vehicleBookingRepo.save(booking);
+
+            if (prevStatus != BookingStatus.CONFIRMED && booking.getStatus() == BookingStatus.CONFIRMED) {
+                sendVehicleConfirmationEmail(booking);
+            }
         } else {
             payment.setStatus(PaymentStatus.FAILED);
             log.warn("Vehicle payment FAILED for order: {}", notify.getOrder_id());
@@ -133,6 +140,7 @@ public class VehiclePaymentService {
             payment.setPaidAt(LocalDateTime.now());
 
             VehicleBooking booking = payment.getVehicleBooking();
+            BookingStatus prevStatus = booking.getStatus();
             if (payment.getPaymentPhase() == PaymentPhase.ADVANCE) {
                 booking.setStatus(BookingStatus.CONFIRMED);
                 log.info("Vehicle booking {} → CONFIRMED (20% advance confirmed via return_url)", booking.getId());
@@ -142,8 +150,54 @@ public class VehiclePaymentService {
             }
             vehicleBookingRepo.save(booking);
             vehiclePaymentRepo.save(payment);
+
+            if (prevStatus != BookingStatus.CONFIRMED && booking.getStatus() == BookingStatus.CONFIRMED) {
+                sendVehicleConfirmationEmail(booking);
+            }
         }
         return toResponse(payment);
+    }
+
+    private void sendVehicleConfirmationEmail(VehicleBooking booking) {
+        if (booking == null) return;
+        try {
+            User customer = booking.getUser();
+            Vehicle vehicle = booking.getVehicle();
+            Trip trip = booking.getTrip();
+
+            BookingConfirmationDetails details = BookingConfirmationDetails.builder()
+                    .bookingId(booking.getId())
+                    .bookingType("VEHICLE")
+                    .customerName(customer != null ? customer.getName() : "Traveler")
+                    .customerEmail(customer != null ? customer.getEmail() : null)
+                    .customerPhone(customer != null ? customer.getPhone() : null)
+                    .providerName(vehicle != null ? (vehicle.getDriverName() != null && !vehicle.getDriverName().isBlank() ? vehicle.getDriverName() : vehicle.getName()) : "Explore Ceylon Vehicle Partner")
+                    .providerPhone(vehicle != null ? vehicle.getDriverPhone() : null)
+                    .providerWhatsapp(vehicle != null ? vehicle.getWhatsappNumber() : null)
+                    .providerEmail(vehicle != null ? vehicle.getEmail() : null)
+                    .providerDistrict(vehicle != null ? vehicle.getDistrict() : null)
+                    .vehicleNumber(vehicle != null ? vehicle.getLicensePlate() : null)
+                    .vehicleType(vehicle != null && vehicle.getType() != null ? vehicle.getType().name() : null)
+                    .vehicleModel(vehicle != null ? (vehicle.getBrand() != null ? vehicle.getBrand() + " " + (vehicle.getModel() != null ? vehicle.getModel() : "") : vehicle.getModel()) : null)
+                    .startDate(booking.getPickupDate())
+                    .endDate(booking.getDropoffDate())
+                    .pickupTime(booking.getPickupTime())
+                    .dropoffTime(booking.getDropoffTime())
+                    .pickupLocation(booking.getPickupLocation())
+                    .dropoffLocation(booking.getDropoffLocation())
+                    .notes(booking.getNotes())
+                    .totalCost(booking.getTotalCost())
+                    .advanceAmount(booking.getAdvanceAmount() != null ? booking.getAdvanceAmount() : (booking.getTotalCost() != null ? booking.getTotalCost() * 0.20 : 0.0))
+                    .balanceAmount(booking.getBalanceAmount() != null ? booking.getBalanceAmount() : (booking.getTotalCost() != null ? booking.getTotalCost() * 0.80 : 0.0))
+                    .currency("USD")
+                    .tripId(trip != null ? trip.getId() : null)
+                    .tripTitle(trip != null ? trip.getTitle() : null)
+                    .build();
+
+            emailSenderService.sendBookingConfirmation(details);
+        } catch (Exception e) {
+            log.error("Failed to build/dispatch vehicle confirmation email for booking #{}: {}", booking.getId(), e.getMessage());
+        }
     }
 
     // ── Get payments for a booking ────────────────────────

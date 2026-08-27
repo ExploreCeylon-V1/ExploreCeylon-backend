@@ -1,5 +1,6 @@
 package com.exploreceylon.backend.service;
 
+import com.exploreceylon.backend.dto.email.BookingConfirmationDetails;
 import com.exploreceylon.backend.dto.payment.*;
 import com.exploreceylon.backend.exception.UnauthenticatedException;
 import com.exploreceylon.backend.model.*;
@@ -26,6 +27,7 @@ public class GuidePaymentService {
     private final GuideBookingRepository   guideBookingRepo;
     private final UserRepository           userRepo;
     private final PayHereService           payHereService;
+    private final EmailSenderService       emailSenderService;
 
     // ── Step 1: Initiate payment → build PayHere form ─────
     @Transactional
@@ -106,6 +108,7 @@ public class GuidePaymentService {
 
             // 4. Update booking status
             GuideBooking booking = payment.getGuideBooking();
+            BookingStatus prevStatus = booking.getStatus();
             if (payment.getPaymentPhase() == PaymentPhase.ADVANCE) {
                 booking.setStatus(BookingStatus.CONFIRMED);
                 log.info("Guide booking {} → CONFIRMED (20% advance paid)", booking.getId());
@@ -114,6 +117,10 @@ public class GuidePaymentService {
                 log.info("Guide booking {} → COMPLETED (80% balance paid)", booking.getId());
             }
             guideBookingRepo.save(booking);
+
+            if (prevStatus != BookingStatus.CONFIRMED && booking.getStatus() == BookingStatus.CONFIRMED) {
+                sendGuideConfirmationEmail(booking);
+            }
         } else {
             payment.setStatus(PaymentStatus.FAILED);
             log.warn("Guide payment FAILED for order: {}", notify.getOrder_id());
@@ -142,6 +149,7 @@ public class GuidePaymentService {
             payment.setPaidAt(LocalDateTime.now());
 
             GuideBooking booking = payment.getGuideBooking();
+            BookingStatus prevStatus = booking.getStatus();
             if (payment.getPaymentPhase() == PaymentPhase.ADVANCE) {
                 booking.setStatus(BookingStatus.CONFIRMED);
                 log.info("Guide booking {} → CONFIRMED (20% advance confirmed via return_url)", booking.getId());
@@ -151,8 +159,47 @@ public class GuidePaymentService {
             }
             guideBookingRepo.save(booking);
             guidePaymentRepo.save(payment);
+
+            if (prevStatus != BookingStatus.CONFIRMED && booking.getStatus() == BookingStatus.CONFIRMED) {
+                sendGuideConfirmationEmail(booking);
+            }
         }
         return toResponse(payment);
+    }
+
+    private void sendGuideConfirmationEmail(GuideBooking booking) {
+        if (booking == null) return;
+        try {
+            User customer = booking.getUser();
+            TourGuide guide = booking.getGuide();
+            Trip trip = booking.getTrip();
+
+            BookingConfirmationDetails details = BookingConfirmationDetails.builder()
+                    .bookingId(booking.getId())
+                    .bookingType("GUIDE")
+                    .customerName(customer != null ? customer.getName() : "Traveler")
+                    .customerEmail(customer != null ? customer.getEmail() : null)
+                    .customerPhone(customer != null ? customer.getPhone() : null)
+                    .providerName(guide != null ? guide.getFullName() : "Explore Ceylon Tour Guide")
+                    .providerPhone(guide != null ? guide.getPhone() : null)
+                    .providerWhatsapp(guide != null ? guide.getWhatsappNumber() : null)
+                    .providerEmail(guide != null ? guide.getEmail() : null)
+                    .providerDistrict(guide != null ? guide.getDistrict() : null)
+                    .startDate(booking.getStartDate())
+                    .endDate(booking.getEndDate())
+                    .notes(booking.getNotes())
+                    .totalCost(booking.getTotalCost())
+                    .advanceAmount(booking.getAdvanceAmount() != null ? booking.getAdvanceAmount() : (booking.getTotalCost() != null ? booking.getTotalCost() * 0.20 : 0.0))
+                    .balanceAmount(booking.getBalanceAmount() != null ? booking.getBalanceAmount() : (booking.getTotalCost() != null ? booking.getTotalCost() * 0.80 : 0.0))
+                    .currency("USD")
+                    .tripId(trip != null ? trip.getId() : null)
+                    .tripTitle(trip != null ? trip.getTitle() : null)
+                    .build();
+
+            emailSenderService.sendBookingConfirmation(details);
+        } catch (Exception e) {
+            log.error("Failed to build/dispatch guide confirmation email for booking #{}: {}", booking.getId(), e.getMessage());
+        }
     }
 
     // ── Get payments for a booking ────────────────────────

@@ -68,6 +68,8 @@ public class AdminPaymentManagementTest {
         v.setDistrict("Colombo");
         v.setDriverName("Kamal Perera");
         v.setDriverPhone("+94779988776");
+        v.setEmail("kamal.driver@example.com");
+        v.setLicensePlate("CAB-1234");
         vehicle = vehicleRepository.save(v);
 
         guide = guideRepository.save(TourGuide.builder()
@@ -77,6 +79,7 @@ public class AdminPaymentManagementTest {
                 .district("Kandy")
                 .pricePerDay(60.0)
                 .phone("+94712345678")
+                .email("sunil.guide@example.com")
                 .build());
 
         trip = tripRepository.save(Trip.builder()
@@ -327,6 +330,9 @@ public class AdminPaymentManagementTest {
         assertEquals("PENDING", detail.getFinalPayment().getStatus());
         assertEquals(trip.getId(), detail.getTripId());
         assertEquals("Ceylon Heritage Safari", detail.getTripTitle());
+        assertEquals("kamal.driver@example.com", detail.getProviderEmail());
+        assertEquals("CAB-1234", detail.getVehicleNumber());
+        assertEquals("Kamal Perera", detail.getDriverName());
     }
 
     @Test
@@ -337,6 +343,7 @@ public class AdminPaymentManagementTest {
         assertEquals("GUIDE", detail.getBookingType());
         assertEquals("CONFIRMED", detail.getBookingStatus());
         assertEquals("Sunil Fernando", detail.getProviderName());
+        assertEquals("sunil.guide@example.com", detail.getProviderEmail());
         assertEquals(180.0, detail.getTotalCost());
         assertEquals(36.0, detail.getAdvanceAmount());
         assertEquals(144.0, detail.getBalanceAmount());

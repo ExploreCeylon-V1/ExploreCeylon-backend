@@ -1,5 +1,6 @@
 package com.exploreceylon.backend.service;
 
+import com.exploreceylon.backend.dto.admin.DashboardStatsResponse;
 import com.exploreceylon.backend.dto.admin.GuideStatsResponse;
 import com.exploreceylon.backend.dto.admin.VehicleStatsResponse;
 import com.exploreceylon.backend.model.*;
@@ -398,5 +399,120 @@ public class AdminRevenueKpiTest {
 
         // Must equal booking.totalCost (80,000.0), without any double counting from 4 payment rows
         assertEquals(80000.0, vStats.getTotalRevenue(), "Booking totalCost must be counted exactly once");
+    }
+
+    @Test
+    @DisplayName("8. Dashboard Total Revenue equals vehicles page Total Revenue + tour guides page Total Revenue")
+    void testDashboardTotalRevenueEqualsVehiclePlusGuideRevenue() {
+        // Vehicle COMPLETED
+        vehicleBookingRepository.save(VehicleBooking.builder()
+                .user(traveler).vehicle(vehicle).pickupLocation("Colombo")
+                .pickupDate(LocalDate.now().minusDays(5)).dropoffDate(LocalDate.now().minusDays(1))
+                .status(VehicleBooking.BookingStatus.COMPLETED).totalCost(120000.0)
+                .advanceAmount(24000.0).balanceAmount(96000.0).build());
+
+        // Guide COMPLETED
+        guideBookingRepository.save(GuideBooking.builder()
+                .user(traveler).guide(guide)
+                .startDate(LocalDate.now().minusDays(5)).endDate(LocalDate.now().minusDays(1))
+                .status(GuideBooking.BookingStatus.COMPLETED).totalCost(80000.0)
+                .advanceAmount(16000.0).balanceAmount(64000.0).build());
+
+        // Also add some CONFIRMED, PENDING, CANCELLED bookings that should NOT be in completed revenue
+        vehicleBookingRepository.save(VehicleBooking.builder()
+                .user(traveler).vehicle(vehicle).pickupLocation("Galle")
+                .pickupDate(LocalDate.now().plusDays(2)).dropoffDate(LocalDate.now().plusDays(5))
+                .status(VehicleBooking.BookingStatus.CONFIRMED).totalCost(50000.0)
+                .advanceAmount(10000.0).balanceAmount(40000.0).build());
+
+        guideBookingRepository.save(GuideBooking.builder()
+                .user(traveler).guide(guide)
+                .startDate(LocalDate.now().plusDays(2)).endDate(LocalDate.now().plusDays(5))
+                .status(GuideBooking.BookingStatus.CONFIRMED).totalCost(30000.0)
+                .advanceAmount(6000.0).balanceAmount(24000.0).build());
+
+        VehicleStatsResponse vStats = adminService.getVehicleStats();
+        GuideStatsResponse gStats = adminService.getGuideStats();
+        DashboardStatsResponse dStats = adminService.getDashboardStats();
+
+        assertEquals(120000.0, vStats.getTotalRevenue(), "Vehicles page revenue");
+        assertEquals(80000.0, gStats.getTotalRevenue(), "Guides page revenue");
+
+        assertEquals(vStats.getTotalRevenue(), dStats.getVehicleRevenue(), "Dashboard vehicleRevenue matches Vehicles page");
+        assertEquals(gStats.getTotalRevenue(), dStats.getGuideRevenue(), "Dashboard guideRevenue matches Guides page");
+        assertEquals(vStats.getTotalRevenue() + gStats.getTotalRevenue(), dStats.getTotalRevenue(),
+                "Dashboard Total Revenue must equal vehicles page Total Revenue + tour guides page Total Revenue (200,000.0)");
+    }
+
+    @Test
+    @DisplayName("9. Dashboard shows confirmed vehicle bookings, confirmed guide bookings, and confirmed total bookings")
+    void testDashboardConfirmedBookingsCount() {
+        // 2 CONFIRMED vehicle bookings, 1 COMPLETED, 1 PENDING_PAYMENT, 1 CANCELLED
+        vehicleBookingRepository.save(VehicleBooking.builder()
+                .user(traveler).vehicle(vehicle).pickupLocation("A")
+                .pickupDate(LocalDate.now().plusDays(1)).dropoffDate(LocalDate.now().plusDays(3))
+                .status(VehicleBooking.BookingStatus.CONFIRMED).totalCost(1000.0)
+                .advanceAmount(200.0).balanceAmount(800.0).build());
+
+        vehicleBookingRepository.save(VehicleBooking.builder()
+                .user(traveler).vehicle(vehicle).pickupLocation("B")
+                .pickupDate(LocalDate.now().plusDays(4)).dropoffDate(LocalDate.now().plusDays(6))
+                .status(VehicleBooking.BookingStatus.CONFIRMED).totalCost(2000.0)
+                .advanceAmount(400.0).balanceAmount(1600.0).build());
+
+        vehicleBookingRepository.save(VehicleBooking.builder()
+                .user(traveler).vehicle(vehicle).pickupLocation("C")
+                .pickupDate(LocalDate.now().minusDays(5)).dropoffDate(LocalDate.now().minusDays(1))
+                .status(VehicleBooking.BookingStatus.COMPLETED).totalCost(3000.0)
+                .advanceAmount(600.0).balanceAmount(2400.0).build());
+
+        vehicleBookingRepository.save(VehicleBooking.builder()
+                .user(traveler).vehicle(vehicle).pickupLocation("D")
+                .pickupDate(LocalDate.now().plusDays(7)).dropoffDate(LocalDate.now().plusDays(9))
+                .status(VehicleBooking.BookingStatus.PENDING_PAYMENT).totalCost(4000.0)
+                .advanceAmount(800.0).balanceAmount(3200.0).build());
+
+        vehicleBookingRepository.save(VehicleBooking.builder()
+                .user(traveler).vehicle(vehicle).pickupLocation("E")
+                .pickupDate(LocalDate.now().plusDays(10)).dropoffDate(LocalDate.now().plusDays(12))
+                .status(VehicleBooking.BookingStatus.CANCELLED).totalCost(5000.0)
+                .advanceAmount(1000.0).balanceAmount(4000.0).build());
+
+        // 3 CONFIRMED guide bookings, 1 COMPLETED, 1 PENDING_PAYMENT
+        guideBookingRepository.save(GuideBooking.builder()
+                .user(traveler).guide(guide)
+                .startDate(LocalDate.now().plusDays(1)).endDate(LocalDate.now().plusDays(3))
+                .status(GuideBooking.BookingStatus.CONFIRMED).totalCost(500.0)
+                .advanceAmount(100.0).balanceAmount(400.0).build());
+
+        guideBookingRepository.save(GuideBooking.builder()
+                .user(traveler).guide(guide)
+                .startDate(LocalDate.now().plusDays(4)).endDate(LocalDate.now().plusDays(6))
+                .status(GuideBooking.BookingStatus.CONFIRMED).totalCost(600.0)
+                .advanceAmount(120.0).balanceAmount(480.0).build());
+
+        guideBookingRepository.save(GuideBooking.builder()
+                .user(traveler).guide(guide)
+                .startDate(LocalDate.now().plusDays(7)).endDate(LocalDate.now().plusDays(9))
+                .status(GuideBooking.BookingStatus.CONFIRMED).totalCost(700.0)
+                .advanceAmount(140.0).balanceAmount(560.0).build());
+
+        guideBookingRepository.save(GuideBooking.builder()
+                .user(traveler).guide(guide)
+                .startDate(LocalDate.now().minusDays(5)).endDate(LocalDate.now().minusDays(1))
+                .status(GuideBooking.BookingStatus.COMPLETED).totalCost(800.0)
+                .advanceAmount(160.0).balanceAmount(640.0).build());
+
+        guideBookingRepository.save(GuideBooking.builder()
+                .user(traveler).guide(guide)
+                .startDate(LocalDate.now().plusDays(10)).endDate(LocalDate.now().plusDays(12))
+                .status(GuideBooking.BookingStatus.PENDING_PAYMENT).totalCost(900.0)
+                .advanceAmount(180.0).balanceAmount(720.0).build());
+
+        DashboardStatsResponse dStats = adminService.getDashboardStats();
+
+        assertEquals(2L, dStats.getVehicleBookings(), "Vehicle Bookings total on dashboard must equal confirmed vehicle bookings (2)");
+        assertEquals(3L, dStats.getGuideBookings(), "Guide Bookings total on dashboard must equal confirmed guide bookings (3)");
+        assertEquals(5L, dStats.getTotalBookings(), "Total Bookings on dashboard must equal confirmed total bookings (2 + 3 = 5)");
     }
 }

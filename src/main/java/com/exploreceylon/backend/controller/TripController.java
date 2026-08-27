@@ -19,6 +19,7 @@ import java.util.List;
 public class TripController {
 
     private final TripService tripService;
+    private final com.exploreceylon.backend.service.BudgetService budgetService;
 
     // POST /api/v1/trips — Create trip
     @PostMapping
@@ -130,5 +131,23 @@ public class TripController {
         request.setTripId(id);
         return ResponseEntity.ok(
                 tripService.generateAiItinerary(request));
+    }
+
+    // GET /api/v1/trips/{id}/syncable-bookings
+    @GetMapping("/{id}/syncable-bookings")
+    public ResponseEntity<List<SyncableBookingResponse>> getSyncableBookings(
+            @PathVariable Long id) {
+        return ResponseEntity.ok(
+                budgetService.getSyncableBookings(id));
+    }
+
+    // POST /api/v1/trips/{id}/budget/sync-booking/{type}/{bookingId}
+    @PostMapping("/{id}/budget/sync-booking/{type}/{bookingId}")
+    public ResponseEntity<com.exploreceylon.backend.dto.budget.BudgetResponse> syncBookingToBudget(
+            @PathVariable Long id,
+            @PathVariable String type,
+            @PathVariable Long bookingId) {
+        return ResponseEntity.ok(
+                budgetService.syncBookingToTripBudget(id, type, bookingId));
     }
 }
