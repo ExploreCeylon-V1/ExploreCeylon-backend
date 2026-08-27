@@ -26,6 +26,7 @@ public class LocalVehicleResponse {
     private String driverPhone;
     private String whatsappNumber;
     private String driverLanguages;
+    private String email;
     private String description;
     private List<String> imageUrls;
     private Double rating;

@@ -1,6 +1,7 @@
 package com.exploreceylon.backend.service;
 
 import com.exploreceylon.backend.dto.budget.*;
+import com.exploreceylon.backend.dto.trip.SyncableBookingResponse;
 import com.exploreceylon.backend.exception.UnauthenticatedException;
 import com.exploreceylon.backend.model.*;
 import com.exploreceylon.backend.repository.*;
@@ -232,6 +233,261 @@ public class BudgetService {
         return toResponse(findBudget(budgetId));
     }
 
+    // ── Ensure Budget Exists for Trip ───────────────────────
+    public Budget ensureBudget(Long tripId) {
+        Trip trip = tripRepository.findById(tripId)
+                .orElseThrow(() -> new RuntimeException("Trip not found: " + tripId));
+        User user = getCurrentUser();
+        return budgetRepository.findByTripId(tripId).orElseGet(() -> {
+            Double defaultBudget = 1000.0;
+            if (trip.getBudgetAmountLkr() != null && trip.getBudgetAmountLkr() > 0) {
+                defaultBudget = Math.round(trip.getBudgetAmountLkr() / 325.0 * 100.0) / 100.0;
+            }
+            Budget b = Budget.builder()
+                    .trip(trip)
+                    .user(trip.getUser() != null ? trip.getUser() : user)
+                    .totalBudget(defaultBudget)
+                    .currency("USD")
+                    .build();
+            return budgetRepository.save(b);
+        });
+    }
+
+    // ── Get Syncable Bookings for Trip ───────────────────────
+    public List<SyncableBookingResponse> getSyncableBookings(Long tripId) {
+        User user = getCurrentUser();
+        Trip trip = tripRepository.findById(tripId)
+                .orElseThrow(() -> new RuntimeException("Trip not found: " + tripId));
+
+        if (!trip.getUser().getId().equals(user.getId()) && user.getRole() != User.Role.ADMIN) {
+            throw new com.exploreceylon.backend.exception.ForbiddenException("Not your trip");
+        }
+
+        Optional<Budget> budgetOpt = budgetRepository.findByTripId(tripId);
+        Set<String> syncedRefIds = budgetOpt.map(b -> itemRepository.findByBudgetIdOrderByCreatedAtDesc(b.getId()).stream()
+                .map(BudgetItem::getReferenceId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet()))
+                .orElseGet(HashSet::new);
+
+        String currency = budgetOpt.map(Budget::getCurrency).orElse("USD");
+
+        List<SyncableBookingResponse> result = new ArrayList<>();
+
+        // 1. Vehicle Bookings
+        List<VehicleBooking> vehicleBookings = vehicleBookingRepository.findByUserIdOrderByCreatedAtDesc(user.getId());
+        for (VehicleBooking vb : vehicleBookings) {
+            if (vb.getStatus() != VehicleBooking.BookingStatus.CONFIRMED &&
+                vb.getStatus() != VehicleBooking.BookingStatus.COMPLETED) {
+                continue;
+            }
+
+            Vehicle v = vb.getVehicle();
+            String providerName = (v != null)
+                    ? (v.getDriverName() != null && !v.getDriverName().isBlank() ? v.getDriverName() + " (" + v.getName() + ")" : v.getName())
+                    : "Vehicle Rental";
+            String providerImg = (v != null && v.getImageUrls() != null && !v.getImageUrls().isEmpty())
+                    ? v.getImageUrls().get(0) : null;
+
+            double totalCost = vb.getTotalCost() != null ? vb.getTotalCost() : 0.0;
+            double adv = vb.getAdvanceAmount() != null ? vb.getAdvanceAmount() : totalCost * 0.20;
+            double bal = vb.getBalanceAmount() != null ? vb.getBalanceAmount() : totalCost * 0.80;
+
+            boolean isSynced = syncedRefIds.contains("VB-" + vb.getId());
+
+            result.add(SyncableBookingResponse.builder()
+                    .bookingId(vb.getId())
+                    .bookingType("VEHICLE")
+                    .referenceId("VB-" + vb.getId())
+                    .providerName(providerName)
+                    .providerImage(providerImg)
+                    .providerPhone(v != null ? v.getDriverPhone() : null)
+                    .providerEmail(v != null ? v.getEmail() : null)
+                    .vehicleNumber(v != null ? v.getLicensePlate() : null)
+                    .startDate(vb.getPickupDate())
+                    .endDate(vb.getDropoffDate())
+                    .totalCost(totalCost)
+                    .advanceAmount(adv)
+                    .balanceAmount(bal)
+                    .currency(currency)
+                    .status(vb.getStatus().name())
+                    .isSynced(isSynced)
+                    .tripId(vb.getTrip() != null ? vb.getTrip().getId() : null)
+                    .tripTitle(vb.getTrip() != null ? vb.getTrip().getTitle() : null)
+                    .pickupLocation(vb.getPickupLocation())
+                    .notes(vb.getNotes())
+                    .build());
+        }
+
+        // 2. Guide Bookings
+        List<GuideBooking> guideBookings = guideBookingRepository.findByUserIdOrderByCreatedAtDesc(user.getId());
+        for (GuideBooking gb : guideBookings) {
+            if (gb.getStatus() != GuideBooking.BookingStatus.CONFIRMED &&
+                gb.getStatus() != GuideBooking.BookingStatus.COMPLETED) {
+                continue;
+            }
+
+            TourGuide g = gb.getGuide();
+            String providerName = (g != null) ? g.getFullName() : "Tour Guide";
+            String providerImg = (g != null)
+                    ? (g.getPhotoUrl() != null ? g.getPhotoUrl() : (g.getImageUrls() != null && !g.getImageUrls().isEmpty() ? g.getImageUrls().get(0) : null))
+                    : null;
+
+            double totalCost = gb.getTotalCost() != null ? gb.getTotalCost() : 0.0;
+            double adv = gb.getAdvanceAmount() != null ? gb.getAdvanceAmount() : totalCost * 0.20;
+            double bal = gb.getBalanceAmount() != null ? gb.getBalanceAmount() : totalCost * 0.80;
+
+            boolean isSynced = syncedRefIds.contains("GB-" + gb.getId());
+
+            result.add(SyncableBookingResponse.builder()
+                    .bookingId(gb.getId())
+                    .bookingType("GUIDE")
+                    .referenceId("GB-" + gb.getId())
+                    .providerName(providerName)
+                    .providerImage(providerImg)
+                    .providerPhone(g != null ? g.getPhone() : null)
+                    .providerEmail(g != null ? g.getEmail() : null)
+                    .vehicleNumber(null)
+                    .startDate(gb.getStartDate())
+                    .endDate(gb.getEndDate())
+                    .totalCost(totalCost)
+                    .advanceAmount(adv)
+                    .balanceAmount(bal)
+                    .currency(currency)
+                    .status(gb.getStatus().name())
+                    .isSynced(isSynced)
+                    .tripId(gb.getTrip() != null ? gb.getTrip().getId() : null)
+                    .tripTitle(gb.getTrip() != null ? gb.getTrip().getTitle() : null)
+                    .pickupLocation(null)
+                    .notes(gb.getNotes())
+                    .build());
+        }
+
+        // Sort: items for this trip first, then unsynced first, then by date descending
+        result.sort((a, b) -> {
+            boolean aThisTrip = Objects.equals(a.getTripId(), tripId);
+            boolean bThisTrip = Objects.equals(b.getTripId(), tripId);
+            if (aThisTrip != bThisTrip) return aThisTrip ? -1 : 1;
+            if (a.isSynced() != b.isSynced()) return a.isSynced() ? 1 : -1;
+            if (a.getStartDate() != null && b.getStartDate() != null) {
+                return b.getStartDate().compareTo(a.getStartDate());
+            }
+            return 0;
+        });
+
+        return result;
+    }
+
+    // ── Sync Booking to Trip Budget ───────────────────────────
+    public BudgetResponse syncBookingToTripBudget(Long tripId, String type, Long bookingId) {
+        User user = getCurrentUser();
+        Trip trip = tripRepository.findById(tripId)
+                .orElseThrow(() -> new RuntimeException("Trip not found: " + tripId));
+
+        if (!trip.getUser().getId().equals(user.getId()) && user.getRole() != User.Role.ADMIN) {
+            throw new com.exploreceylon.backend.exception.ForbiddenException("Not your trip");
+        }
+
+        Budget budget = ensureBudget(tripId);
+
+        if ("VEHICLE".equalsIgnoreCase(type)) {
+            VehicleBooking vb = vehicleBookingRepository.findById(bookingId)
+                    .orElseThrow(() -> new com.exploreceylon.backend.exception.ResourceNotFoundException("Vehicle booking not found: " + bookingId));
+
+            if (!vb.getUser().getId().equals(user.getId()) && user.getRole() != User.Role.ADMIN) {
+                throw new com.exploreceylon.backend.exception.ForbiddenException("Not your booking");
+            }
+
+            if (vb.getStatus() != VehicleBooking.BookingStatus.CONFIRMED &&
+                vb.getStatus() != VehicleBooking.BookingStatus.COMPLETED) {
+                throw new RuntimeException("Booking is not confirmed yet (status: " + vb.getStatus() + ")");
+            }
+
+            String refId = "VB-" + vb.getId();
+            if (!itemRepository.existsByBudgetIdAndReferenceId(budget.getId(), refId)) {
+                String title = (vb.getVehicle() != null ? vb.getVehicle().getName() : "Vehicle Rental");
+                long days = (vb.getPickupDate() != null && vb.getDropoffDate() != null)
+                        ? java.time.temporal.ChronoUnit.DAYS.between(vb.getPickupDate(), vb.getDropoffDate()) + 1 : 1;
+                if (days > 1) {
+                    title += " (" + days + " days)";
+                }
+                String notes = vb.getVehicle() != null && vb.getVehicle().getDriverName() != null
+                        ? "Driver: " + vb.getVehicle().getDriverName()
+                        : (vb.getNotes() != null ? vb.getNotes() : "");
+
+                BudgetItem item = BudgetItem.builder()
+                        .budget(budget)
+                        .category(BudgetItem.ItemCategory.VEHICLE)
+                        .title(title)
+                        .amount(vb.getTotalCost() != null ? vb.getTotalCost() : 0.0)
+                        .currency(budget.getCurrency())
+                        .date(vb.getPickupDate() != null ? vb.getPickupDate() : LocalDate.now())
+                        .autoAdded(true)
+                        .referenceId(refId)
+                        .notes(notes)
+                        .build();
+                itemRepository.save(item);
+                log.info("Synced vehicle booking #{} into budget #{} for trip #{}", vb.getId(), budget.getId(), tripId);
+            }
+
+            if (vb.getTrip() == null) {
+                vb.setTrip(trip);
+                vehicleBookingRepository.save(vb);
+            }
+
+        } else if ("GUIDE".equalsIgnoreCase(type)) {
+            GuideBooking gb = guideBookingRepository.findById(bookingId)
+                    .orElseThrow(() -> new com.exploreceylon.backend.exception.ResourceNotFoundException("Guide booking not found: " + bookingId));
+
+            if (!gb.getUser().getId().equals(user.getId()) && user.getRole() != User.Role.ADMIN) {
+                throw new com.exploreceylon.backend.exception.ForbiddenException("Not your booking");
+            }
+
+            if (gb.getStatus() != GuideBooking.BookingStatus.CONFIRMED &&
+                gb.getStatus() != GuideBooking.BookingStatus.COMPLETED) {
+                throw new RuntimeException("Booking is not confirmed yet (status: " + gb.getStatus() + ")");
+            }
+
+            String refId = "GB-" + gb.getId();
+            if (!itemRepository.existsByBudgetIdAndReferenceId(budget.getId(), refId)) {
+                String title = (gb.getGuide() != null ? gb.getGuide().getFullName() : "Tour Guide");
+                long days = (gb.getStartDate() != null && gb.getEndDate() != null)
+                        ? java.time.temporal.ChronoUnit.DAYS.between(gb.getStartDate(), gb.getEndDate()) + 1 : 1;
+                if (days > 1) {
+                    title += " (" + days + " days)";
+                }
+                String notes = gb.getGuide() != null && gb.getGuide().getLanguages() != null
+                        ? "Languages: " + gb.getGuide().getLanguages()
+                        : (gb.getNotes() != null ? gb.getNotes() : "");
+
+                BudgetItem item = BudgetItem.builder()
+                        .budget(budget)
+                        .category(BudgetItem.ItemCategory.GUIDE)
+                        .title(title)
+                        .amount(gb.getTotalCost() != null ? gb.getTotalCost() : 0.0)
+                        .currency(budget.getCurrency())
+                        .date(gb.getStartDate() != null ? gb.getStartDate() : LocalDate.now())
+                        .autoAdded(true)
+                        .referenceId(refId)
+                        .notes(notes)
+                        .build();
+                itemRepository.save(item);
+                log.info("Synced guide booking #{} into budget #{} for trip #{}", gb.getId(), budget.getId(), tripId);
+            }
+
+            if (gb.getTrip() == null) {
+                gb.setTrip(trip);
+                guideBookingRepository.save(gb);
+            }
+        } else {
+            throw new IllegalArgumentException("Unknown booking type: " + type);
+        }
+
+        Budget updatedBudget = budgetRepository.findById(budget.getId())
+                .orElse(budget);
+        return toResponse(updatedBudget);
+    }
+
     // ── Get Items ──────────────────────────────────────────
     public List<BudgetItemResponse> getItems(
             Long budgetId, BudgetItem.ItemCategory category) {
@@ -348,7 +604,8 @@ public class BudgetService {
         res.setTotalBudget(b.getTotalBudget());
         res.setCurrency(b.getCurrency());
         res.setCreatedAt(b.getCreatedAt());
-        res.setItems(b.getItems().stream()
+        List<BudgetItem> items = itemRepository.findByBudgetIdOrderByCreatedAtDesc(b.getId());
+        res.setItems(items.stream()
                 .map(this::toItemResponse)
                 .collect(Collectors.toList()));
         Map<String, Double> allocations = new LinkedHashMap<>();

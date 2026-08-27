@@ -42,6 +42,24 @@ public class BudgetController {
                 budgetService.getSummary(tripId, currency));
     }
 
+    // GET /api/v1/budget/trip/{tripId}/syncable-bookings
+    @GetMapping("/trip/{tripId}/syncable-bookings")
+    public ResponseEntity<List<com.exploreceylon.backend.dto.trip.SyncableBookingResponse>> getSyncableBookings(
+            @PathVariable Long tripId) {
+        return ResponseEntity.ok(
+                budgetService.getSyncableBookings(tripId));
+    }
+
+    // POST /api/v1/budget/trip/{tripId}/sync-booking/{type}/{bookingId}
+    @PostMapping("/trip/{tripId}/sync-booking/{type}/{bookingId}")
+    public ResponseEntity<BudgetResponse> syncBookingToBudget(
+            @PathVariable Long tripId,
+            @PathVariable String type,
+            @PathVariable Long bookingId) {
+        return ResponseEntity.ok(
+                budgetService.syncBookingToTripBudget(tripId, type, bookingId));
+    }
+
     // PUT /api/v1/budget/{budgetId}
     @PutMapping("/{budgetId}")
     public ResponseEntity<BudgetResponse> updateBudget(

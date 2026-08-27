@@ -146,5 +146,10 @@ CHECK ((category)::text = ANY (ARRAY[
     'BEACH_COAST', 'HILL_COUNTRY', 'SCENIC_VIEWS', 'CITY_URBAN'
 ]::text[]));
 
+-- ─────────────────────────────────────────────────────────────
+-- 7. Add email column to vehicles table if not exists
+-- ─────────────────────────────────────────────────────────────
+ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS email VARCHAR(255);
+
 
 
