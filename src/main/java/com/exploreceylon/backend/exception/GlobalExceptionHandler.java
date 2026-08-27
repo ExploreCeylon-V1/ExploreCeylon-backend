@@ -1,5 +1,6 @@
 package com.exploreceylon.backend.exception;
 
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.BadCredentialsException;
@@ -11,6 +12,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 @RestControllerAdvice
+@Slf4j
 public class GlobalExceptionHandler {
 
     // Validation errors
@@ -42,6 +44,7 @@ public class GlobalExceptionHandler {
     // Unauthenticated (401)
     @ExceptionHandler(UnauthenticatedException.class)
     public ResponseEntity<Map<String, String>> handleUnauthenticated(UnauthenticatedException ex) {
+        log.warn("[DIAGNOSTIC-CONTROLLER-401] UnauthenticatedException thrown: {}", ex.getMessage());
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                 .body(Map.of("error", "Unauthorized", "message", ex.getMessage()));
     }

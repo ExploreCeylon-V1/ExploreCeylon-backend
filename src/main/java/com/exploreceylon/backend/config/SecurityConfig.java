@@ -41,6 +41,12 @@ public class SecurityConfig {
             .csrf(csrf -> csrf.disable())
             .exceptionHandling(exception -> exception
                 .authenticationEntryPoint((request, response, authException) -> {
+                    String authHeader = request.getHeader("Authorization");
+                    String preview = (authHeader == null) ? "NULL" : (authHeader.length() <= 30 ? authHeader + " (len=" + authHeader.length() + ")" : authHeader.substring(0, 15) + "..." + authHeader.substring(authHeader.length() - 15) + " (len=" + authHeader.length() + ")");
+                    org.slf4j.LoggerFactory.getLogger("SecurityDiagnostic").warn(
+                        "[DIAGNOSTIC-401-ENTRYPOINT] Returning 401 for {} {} | AuthHeader: {} | Exception: {} - {}",
+                        request.getMethod(), request.getRequestURI(), preview, authException.getClass().getSimpleName(), authException.getMessage()
+                    );
                     response.setStatus(jakarta.servlet.http.HttpServletResponse.SC_UNAUTHORIZED);
                     response.setContentType("application/json");
                     response.getWriter().write("{\"error\":\"Unauthorized\",\"message\":\"Authentication token is missing, invalid, or expired\"}");

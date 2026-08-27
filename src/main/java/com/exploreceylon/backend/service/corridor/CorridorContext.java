@@ -17,6 +17,11 @@ public class CorridorContext {
     private String encodedPolyline;
     private List<GeoPoint> routePath;
     private double widthKm;
+    private Double intermediateWidthKm;
+    private Double destinationZoneWidthKm;
+    private Double destinationZoneRadiusKm;
+    private String originDistrict;
+    private String destinationDistrict;
     private double maxDetourKm;
     private boolean corridorEnabled;
 }

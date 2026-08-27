@@ -4,6 +4,7 @@ import com.exploreceylon.backend.dto.trip.*;
 import com.exploreceylon.backend.service.TripService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -14,6 +15,7 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/v1/trips")
 @RequiredArgsConstructor
+@Slf4j
 public class TripController {
 
     private final TripService tripService;
@@ -60,7 +62,10 @@ public class TripController {
     @PostMapping("/{id}/days")
     public ResponseEntity<TripResponse> addDay(
             @PathVariable Long id,
-            @Valid @RequestBody AddDayRequest request) {
+            @Valid @RequestBody AddDayRequest request,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        log.info("[DIAGNOSTIC-CONTROLLER] POST /api/v1/trips/{}/days REACHED. Authenticated user: {}",
+                id, userDetails != null ? userDetails.getUsername() : "NONE");
         return ResponseEntity.ok(tripService.addDayToTrip(id, request));
     }
 
