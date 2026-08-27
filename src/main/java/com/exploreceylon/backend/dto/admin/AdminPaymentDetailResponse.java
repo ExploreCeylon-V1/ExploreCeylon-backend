@@ -37,8 +37,11 @@ public class AdminPaymentDetailResponse {
     // ── 3. Provider Information ───────────────────────────
     private Long providerId;
     private String providerName;         // Vehicle Name or Guide Full Name
+    private String driverName;           // Driver name for vehicle bookings
     private String providerPhone;
+    private String providerEmail;
     private String providerDistrict;
+    private String vehicleNumber;        // License plate for vehicle bookings
     private Double pricePerDay;
     private Map<String, Object> providerDetails; // Specific metadata (driver, seats, model, languages, specialties)
 

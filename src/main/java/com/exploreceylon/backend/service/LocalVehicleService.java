@@ -169,6 +169,7 @@ public class LocalVehicleService {
         existingVehicle.setDriverPhone(updatedVehicle.getDriverPhone());
         existingVehicle.setWhatsappNumber(updatedVehicle.getWhatsappNumber());
         existingVehicle.setDriverLanguages(updatedVehicle.getDriverLanguages());
+        existingVehicle.setEmail(updatedVehicle.getEmail());
         existingVehicle.setDriverIncluded(updatedVehicle.getDriverIncluded());
         existingVehicle.setAvailable(updatedVehicle.getAvailable());
         existingVehicle.setDescription(updatedVehicle.getDescription());
@@ -288,6 +289,7 @@ public class LocalVehicleService {
         res.setDriverPhone(v.getDriverPhone());
         res.setWhatsappNumber(v.getWhatsappNumber());
         res.setDriverLanguages(v.getDriverLanguages());
+        res.setEmail(v.getEmail());
         res.setDescription(v.getDescription());
         res.setImageUrls(v.getImageUrls());
         res.setRating(v.getRating());

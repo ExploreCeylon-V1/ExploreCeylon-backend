@@ -25,6 +25,7 @@ public class AdminVehicleRequest {
     private String driverPhone;
     private String whatsappNumber;
     private String driverLanguages;
+    private String email;
     private Boolean driverIncluded;
     private Boolean available;
     private String description;
