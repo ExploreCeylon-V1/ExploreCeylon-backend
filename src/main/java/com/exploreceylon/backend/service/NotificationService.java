@@ -1,6 +1,7 @@
 package com.exploreceylon.backend.service;
 
 import com.exploreceylon.backend.dto.notification.NotificationResponse;
+import com.exploreceylon.backend.exception.UnauthenticatedException;
 import com.exploreceylon.backend.model.Notification;
 import com.exploreceylon.backend.model.User;
 import com.exploreceylon.backend.repository.NotificationRepository;
@@ -38,6 +39,39 @@ public class NotificationService {
                 .read(false)
                 .build();
         notificationRepo.save(n);
+    }
+
+    // ── Admin-triggered overdue reminder ───────────────────
+    @Transactional
+    public boolean sendAdminOverdueReminder(User user, String bookingType, Long bookingId,
+                                            String title, String message) {
+        // Prevent duplicate spam if a reminder was already dispatched in the past 12 hours
+        var existing = notificationRepo.findTopByBookingTypeAndBookingIdAndTypeOrderByCreatedAtDesc(
+                bookingType, bookingId, Notification.NotificationType.BALANCE_REMINDER);
+        if (existing.isPresent() && existing.get().getCreatedAt() != null &&
+                existing.get().getCreatedAt().isAfter(java.time.LocalDateTime.now().minusHours(12))) {
+            return false;
+        }
+
+        Notification n = Notification.builder()
+                .user(user)
+                .type(Notification.NotificationType.BALANCE_REMINDER)
+                .title(title)
+                .message(message)
+                .bookingType(bookingType)
+                .bookingId(bookingId)
+                .read(false)
+                .build();
+        notificationRepo.save(n);
+        return true;
+    }
+
+    @Transactional(readOnly = true)
+    public java.time.LocalDateTime getLastReminderSentAt(String bookingType, Long bookingId) {
+        return notificationRepo.findTopByBookingTypeAndBookingIdAndTypeOrderByCreatedAtDesc(
+                bookingType, bookingId, Notification.NotificationType.BALANCE_REMINDER)
+                .map(Notification::getCreatedAt)
+                .orElse(null);
     }
 
     // ── Get my notifications ───────────────────────────────
@@ -92,6 +126,6 @@ public class NotificationService {
 
     private User getCurrentUser() {
         String email = SecurityContextHolder.getContext().getAuthentication().getName();
-        return userRepo.findByEmail(email).orElseThrow(() -> new RuntimeException("User not found"));
+        return userRepo.findByEmail(email).orElseThrow(() -> new UnauthenticatedException("User not found"));
     }
 }

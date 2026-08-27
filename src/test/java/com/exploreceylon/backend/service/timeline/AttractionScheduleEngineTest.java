@@ -44,7 +44,7 @@ class AttractionScheduleEngineTest {
     void testScheduleDayTimeline() {
         GeoPoint colombo = new GeoPoint(6.9271, 79.8612);
 
-        Destination d1 = Destination.builder().id(1L).name("Pinnawala Elephant Orphanage").category(DestinationCategory.WILDLIFE).latitude(7.3013).longitude(80.3860).build();
+        Destination d1 = Destination.builder().id(1L).name("Pinnawala Elephant Orphanage").category(DestinationCategory.WILDLIFE_NATURE).latitude(7.3013).longitude(80.3860).build();
         Destination d2 = Destination.builder().id(2L).name("Kandy Temple of Tooth").category(DestinationCategory.RELIGIOUS).latitude(7.2906).longitude(80.6337).build();
 
         TripDay tripDay = new TripDay(1, List.of(d1, d2), List.of(), List.of());

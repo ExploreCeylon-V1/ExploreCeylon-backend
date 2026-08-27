@@ -79,7 +79,7 @@ class RouteMatrixEngineTest {
         GeoPoint kandy = new GeoPoint(7.2906, 80.6337);
 
         com.exploreceylon.backend.model.Destination d1 = com.exploreceylon.backend.model.Destination.builder()
-                .id(1L).name("Pinnawala").category(com.exploreceylon.backend.model.Destination.DestinationCategory.WILDLIFE)
+                .id(1L).name("Pinnawala").category(com.exploreceylon.backend.model.Destination.DestinationCategory.WILDLIFE_NATURE)
                 .latitude(7.3013).longitude(80.3860).build();
 
         com.exploreceylon.backend.model.Destination d2 = com.exploreceylon.backend.model.Destination.builder()

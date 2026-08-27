@@ -26,8 +26,17 @@ public class DefaultTravelCorridorEngine implements TravelCorridorEngine {
     @Value("${planner.corridor.enabled:true}")
     private boolean corridorEnabled = true;
 
-    @Value("${planner.corridor.width-km:10.0}")
-    private double defaultWidthKm = 10.0;
+    @Value("${planner.corridor.width-km:8.0}")
+    private double defaultWidthKm = 8.0;
+
+    @Value("${planner.corridor.intermediate-width-km:8.0}")
+    private double defaultIntermediateWidthKm = 8.0;
+
+    @Value("${planner.corridor.destination-zone-width-km:30.0}")
+    private double defaultDestinationZoneWidthKm = 30.0;
+
+    @Value("${planner.corridor.destination-zone-radius-km:25.0}")
+    private double defaultDestinationZoneRadiusKm = 25.0;
 
     @Value("${planner.corridor.max-detour-km:15.0}")
     private double defaultMaxDetourKm = 15.0;
@@ -49,7 +58,19 @@ public class DefaultTravelCorridorEngine implements TravelCorridorEngine {
         }
 
         double widthKm = (context != null && context.getWidthKm() > 0.0) ? context.getWidthKm() : defaultWidthKm;
+        double intermediateWidthKm = (context != null && context.getIntermediateWidthKm() != null && context.getIntermediateWidthKm() > 0.0)
+                ? context.getIntermediateWidthKm()
+                : ((context != null && context.getWidthKm() > 0.0) ? context.getWidthKm() : defaultIntermediateWidthKm);
+        double destinationZoneWidthKm = (context != null && context.getDestinationZoneWidthKm() != null && context.getDestinationZoneWidthKm() > 0.0)
+                ? context.getDestinationZoneWidthKm()
+                : defaultDestinationZoneWidthKm;
+        double destinationZoneRadiusKm = (context != null && context.getDestinationZoneRadiusKm() != null && context.getDestinationZoneRadiusKm() > 0.0)
+                ? context.getDestinationZoneRadiusKm()
+                : defaultDestinationZoneRadiusKm;
         double maxDetourKm = (context != null && context.getMaxDetourKm() > 0.0) ? context.getMaxDetourKm() : defaultMaxDetourKm;
+
+        String originDistrict = context != null ? context.getOriginDistrict() : null;
+        String destinationDistrict = context != null ? context.getDestinationDistrict() : null;
 
         List<GeoPoint> fullRoutePath = extractRoutePath(context);
         if (fullRoutePath.isEmpty()) {
@@ -63,11 +84,12 @@ public class DefaultTravelCorridorEngine implements TravelCorridorEngine {
         GeoPoint destination = fullRoutePath.get(fullRoutePath.size() - 1);
         double directDistance = distanceCalculator.calculateDistanceKm(origin.lat(), origin.lng(), destination.lat(), destination.lng());
 
-        // Bounding box with margin for rapid pre-filtering
-        double minLat = routePath.stream().mapToDouble(GeoPoint::lat).min().orElse(-90.0) - (widthKm / 111.0);
-        double maxLat = routePath.stream().mapToDouble(GeoPoint::lat).max().orElse(90.0) + (widthKm / 111.0);
-        double minLng = routePath.stream().mapToDouble(GeoPoint::lng).min().orElse(-180.0) - (widthKm / 111.0);
-        double maxLng = routePath.stream().mapToDouble(GeoPoint::lng).max().orElse(180.0) + (widthKm / 111.0);
+        // Bounding box with maximum buffer margin across all zones for rapid pre-filtering
+        double maxBufferKm = Math.max(destinationZoneWidthKm, Math.max(intermediateWidthKm, widthKm));
+        double minLat = routePath.stream().mapToDouble(GeoPoint::lat).min().orElse(-90.0) - (maxBufferKm / 111.0);
+        double maxLat = routePath.stream().mapToDouble(GeoPoint::lat).max().orElse(90.0) + (maxBufferKm / 111.0);
+        double minLng = routePath.stream().mapToDouble(GeoPoint::lng).min().orElse(-180.0) - (maxBufferKm / 111.0);
+        double maxLng = routePath.stream().mapToDouble(GeoPoint::lng).max().orElse(180.0) + (maxBufferKm / 111.0);
 
         List<Destination> corridorCandidates = candidates.stream().filter(d -> {
             if (d.getLatitude() == null || d.getLongitude() == null) return false;
@@ -78,19 +100,46 @@ public class DefaultTravelCorridorEngine implements TravelCorridorEngine {
                 return false;
             }
 
-            // 2. Minimum Distance to Polyline Geometry Path
+            double distToDest = distanceCalculator.calculateDistanceKm(destination.lat(), destination.lng(), d.getLatitude(), d.getLongitude());
+            double distToOrigin = distanceCalculator.calculateDistanceKm(origin.lat(), origin.lng(), d.getLatitude(), d.getLongitude());
+
+            boolean isMultiDistrict = originDistrict != null && destinationDistrict != null && !originDistrict.equalsIgnoreCase(destinationDistrict);
+
+            // Multi-district trips (crossing several districts): Do not consider places in the starting district
+            if (isMultiDistrict && originDistrict != null && d.getDistrict() != null && d.getDistrict().equalsIgnoreCase(originDistrict)) {
+                return false;
+            }
+
+            boolean isDestinationZone = distToDest <= destinationZoneRadiusKm
+                    || (destinationDistrict != null && d.getDistrict() != null && d.getDistrict().equalsIgnoreCase(destinationDistrict));
+            boolean isOriginZone = !isMultiDistrict && (distToOrigin <= 20.0
+                    || (originDistrict != null && d.getDistrict() != null && d.getDistrict().equalsIgnoreCase(originDistrict)));
+
+            double allowedWidthKm;
+            double allowedDetourKm = maxDetourKm;
+
+            if (isDestinationZone) {
+                allowedWidthKm = destinationZoneWidthKm;
+                allowedDetourKm = Math.max(maxDetourKm, 35.0);
+            } else if (isOriginZone) {
+                allowedWidthKm = Math.max(intermediateWidthKm, 20.0);
+            } else {
+                allowedWidthKm = intermediateWidthKm;
+            }
+
+            // 2. Distance to Polyline Geometry Path
             double distToRoute = minDistanceToPath(d.getLatitude(), d.getLongitude(), routePath);
-            if (distToRoute > widthKm) {
+            if (distToRoute > allowedWidthKm) {
                 return false;
             }
 
             // 3. Detour Tolerance Check
             double detourKm = calculateDetour(origin, destination, d.getLatitude(), d.getLongitude(), directDistance);
-            return detourKm <= maxDetourKm;
+            return detourKm <= allowedDetourKm;
         }).collect(Collectors.toList());
 
-        log.info("TravelCorridorEngine filtered candidates from {} down to {} (Corridor Width: {}km, Max Detour: {}km)",
-                candidates.size(), corridorCandidates.size(), widthKm, maxDetourKm);
+        log.info("TravelCorridorEngine filtered candidates from {} down to {} (Intermediate Width: {}km, Destination Zone Width: {}km, Max Detour: {}km)",
+                candidates.size(), corridorCandidates.size(), intermediateWidthKm, destinationZoneWidthKm, maxDetourKm);
 
         return corridorCandidates;
     }

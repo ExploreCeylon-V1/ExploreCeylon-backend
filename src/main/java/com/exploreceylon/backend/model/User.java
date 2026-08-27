@@ -68,6 +68,11 @@ public class User implements UserDetails {
     @Builder.Default
     private Boolean active = true;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "kyc_status", nullable = false, length = 20)
+    @Builder.Default
+    private KycStatus kycStatus = KycStatus.NOT_SUBMITTED;
+
     @Column(updatable = false)
     private LocalDateTime createdAt;
 
@@ -77,6 +82,9 @@ public class User implements UserDetails {
     protected void onCreate() {
         createdAt = LocalDateTime.now();
         updatedAt = LocalDateTime.now();
+        if (kycStatus == null) {
+            kycStatus = KycStatus.NOT_SUBMITTED;
+        }
     }
 
     @PreUpdate
@@ -115,5 +123,10 @@ public class User implements UserDetails {
     // ── Auth Provider Enum ────────────────────────────────────
     public enum AuthProvider {
         LOCAL, GOOGLE
+    }
+
+    // ── KYC Status Enum ───────────────────────────────────────
+    public enum KycStatus {
+        NOT_SUBMITTED, PENDING, APPROVED, REJECTED
     }
 }

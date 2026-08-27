@@ -35,11 +35,11 @@ class DestinationSelectionEngineTest {
         GeoPoint colombo = new GeoPoint(6.9271, 79.8612);
         GeoPoint nuwaraEliya = new GeoPoint(6.9497, 80.7891);
 
-        Destination d1 = Destination.builder().id(1L).name("Pinnawala Elephant Orphanage").district("Kegalle").category(DestinationCategory.WILDLIFE).rating(4.5).latitude(7.3013).longitude(80.3860).build();
+        Destination d1 = Destination.builder().id(1L).name("Pinnawala Elephant Orphanage").district("Kegalle").category(DestinationCategory.WILDLIFE_NATURE).rating(4.5).latitude(7.3013).longitude(80.3860).build();
         Destination d2 = Destination.builder().id(2L).name("Kandy Temple of Tooth").district("Kandy").category(DestinationCategory.RELIGIOUS).rating(4.8).latitude(7.2906).longitude(80.6337).build();
-        Destination d3 = Destination.builder().id(3L).name("Royal Botanical Gardens Peradeniya").district("Kandy").category(DestinationCategory.CULTURAL).rating(4.7).latitude(7.2683).longitude(80.5966).build();
-        Destination d4 = Destination.builder().id(4L).name("Gregory Lake").district("Nuwara Eliya").category(DestinationCategory.HILL).rating(4.4).latitude(6.9538).longitude(80.7811).build();
-        Destination d5 = Destination.builder().id(5L).name("Pedro Tea Estate").district("Nuwara Eliya").category(DestinationCategory.CULTURAL).rating(4.6).latitude(6.9691).longitude(80.7964).build();
+        Destination d3 = Destination.builder().id(3L).name("Royal Botanical Gardens Peradeniya").district("Kandy").category(DestinationCategory.CULTURE_HERITAGE).rating(4.7).latitude(7.2683).longitude(80.5966).build();
+        Destination d4 = Destination.builder().id(4L).name("Gregory Lake").district("Nuwara Eliya").category(DestinationCategory.HILL_COUNTRY).rating(4.4).latitude(6.9538).longitude(80.7811).build();
+        Destination d5 = Destination.builder().id(5L).name("Pedro Tea Estate").district("Nuwara Eliya").category(DestinationCategory.CULTURE_HERITAGE).rating(4.6).latitude(6.9691).longitude(80.7964).build();
 
         List<DayBudget> dayBudgets = List.of(
                 DayBudget.builder().dayNumber(1).availableSightseeingMinutes(390).maximumVisitCount(4).build(),
@@ -75,7 +75,7 @@ class DestinationSelectionEngineTest {
         Destination t1 = Destination.builder().id(10L).name("Temple 1").category(DestinationCategory.RELIGIOUS).latitude(7.0).longitude(80.0).rating(4.5).build();
         Destination t2 = Destination.builder().id(11L).name("Temple 2").category(DestinationCategory.RELIGIOUS).latitude(7.1).longitude(80.1).rating(4.5).build();
         Destination t3 = Destination.builder().id(12L).name("Temple 3").category(DestinationCategory.RELIGIOUS).latitude(7.2).longitude(80.2).rating(4.5).build();
-        Destination m1 = Destination.builder().id(13L).name("Museum 1").category(DestinationCategory.CULTURAL).latitude(7.25).longitude(80.25).rating(4.5).build();
+        Destination m1 = Destination.builder().id(13L).name("Museum 1").category(DestinationCategory.CULTURE_HERITAGE).latitude(7.25).longitude(80.25).rating(4.5).build();
 
         List<DayBudget> dayBudgets = List.of(
                 DayBudget.builder().dayNumber(1).availableSightseeingMinutes(390).maximumVisitCount(6).build()

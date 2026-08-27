@@ -1,6 +1,7 @@
 package com.exploreceylon.backend.service;
 
 import com.exploreceylon.backend.dto.budget.*;
+import com.exploreceylon.backend.exception.UnauthenticatedException;
 import com.exploreceylon.backend.model.*;
 import com.exploreceylon.backend.repository.*;
 import lombok.RequiredArgsConstructor;
@@ -39,8 +40,7 @@ public class BudgetService {
         String email = SecurityContextHolder.getContext()
                 .getAuthentication().getName();
         return userRepository.findByEmail(email)
-                .orElseThrow(() -> new RuntimeException(
-                        "User not found"));
+                .orElseThrow(() -> new UnauthenticatedException("User not found"));
     }
 
     // ── Create Budget ──────────────────────────────────────

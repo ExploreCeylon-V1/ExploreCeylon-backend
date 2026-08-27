@@ -158,6 +158,9 @@ public class AuthService {
         User user = refreshToken.getUser();
 
         String accessToken = jwtService.generateToken(user);
+        String tokenPreview = (accessToken.length() <= 30) ? accessToken : accessToken.substring(0, 15) + "..." + accessToken.substring(accessToken.length() - 15) + " (len=" + accessToken.length() + ")";
+        log.info("[DIAGNOSTIC-REFRESH] Issued fresh accessToken for user: {} | TokenPreview: {} | RefreshToken: {}",
+                user.getEmail(), tokenPreview, token);
 
         return AuthResponse.builder()
                 .accessToken(accessToken)
@@ -230,6 +233,7 @@ public class AuthService {
                 .name(user.getName())
                 .email(user.getEmail())
                 .role(user.getRole().name())
+                .kycStatus(user.getKycStatus() != null ? user.getKycStatus().name() : "NOT_SUBMITTED")
                 .build();
     }
 }

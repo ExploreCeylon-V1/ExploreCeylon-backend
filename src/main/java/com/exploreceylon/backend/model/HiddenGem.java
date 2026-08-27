@@ -105,7 +105,13 @@ public class HiddenGem {
 
     // ── Enum ───────────────────────────────────────────────
     public enum GemCategory {
-        BEACH, WATERFALL, RUINS,
-        VIEWPOINT, VILLAGE, CAFE, TEMPLE
+        ADVENTURE,
+        CULTURE_HERITAGE,
+        RELIGIOUS,
+        WILDLIFE_NATURE,
+        BEACH_COAST,
+        HILL_COUNTRY,
+        SCENIC_VIEWS,
+        CITY_URBAN
     }
 }

@@ -1,6 +1,8 @@
 package com.exploreceylon.backend.service;
 
 import com.exploreceylon.backend.dto.payment.*;
+import com.exploreceylon.backend.exception.ForbiddenException;
+import com.exploreceylon.backend.exception.UnauthenticatedException;
 import com.exploreceylon.backend.model.*;
 import com.exploreceylon.backend.model.VehiclePayment.PaymentPhase;
 import com.exploreceylon.backend.model.VehiclePayment.PaymentStatus;
@@ -35,7 +37,7 @@ public class VehiclePaymentService {
             .orElseThrow(() -> new RuntimeException("Vehicle booking not found: " + req.getBookingId()));
 
         if (!booking.getUser().getId().equals(user.getId())) {
-            throw new RuntimeException("Not your booking");
+            throw new ForbiddenException("Not your booking");
         }
 
         PaymentPhase phase = PaymentPhase.valueOf(req.getPaymentPhase());
@@ -180,6 +182,6 @@ public class VehiclePaymentService {
 
     private User getCurrentUser() {
         String email = SecurityContextHolder.getContext().getAuthentication().getName();
-        return userRepo.findByEmail(email).orElseThrow(() -> new RuntimeException("User not found"));
+        return userRepo.findByEmail(email).orElseThrow(() -> new UnauthenticatedException("User not found"));
     }
 }

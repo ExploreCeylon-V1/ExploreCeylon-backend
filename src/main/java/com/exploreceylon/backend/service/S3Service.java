@@ -8,9 +8,14 @@ import org.springframework.web.multipart.MultipartFile;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
+import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
+import software.amazon.awssdk.services.s3.presigner.S3Presigner;
+import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
+import software.amazon.awssdk.services.s3.presigner.model.PresignedGetObjectRequest;
 
 import java.io.IOException;
+import java.time.Duration;
 import java.util.Map;
 import java.util.UUID;
 
@@ -20,6 +25,7 @@ import java.util.UUID;
 public class S3Service {
 
     private final S3Client s3Client;
+    private final S3Presigner s3Presigner;
 
     @Value("${aws.s3.bucket-name}")
     private String bucketName;
@@ -40,6 +46,14 @@ public class S3Service {
             "image/jpg", ".jpg",
             "image/png", ".png",
             "image/webp", ".webp"
+    );
+
+    private static final Map<String, String> KYC_ALLOWED_TYPES = Map.of(
+            "image/jpeg", ".jpg",
+            "image/jpg", ".jpg",
+            "image/png", ".png",
+            "image/webp", ".webp",
+            "application/pdf", ".pdf"
     );
 
     /**
@@ -72,6 +86,60 @@ public class S3Service {
         }
     }
 
+    /**
+     * Dedicated private upload for KYC documents. Stores under kyc-documents/{userId}/{verificationId}/{side}.{ext}
+     * Returns the relative S3 key, NOT a public URL.
+     */
+    public String uploadKycDocument(MultipartFile file, Long userId, UUID verificationId, String side) {
+        validateKycFile(file);
+
+        String extension = KYC_ALLOWED_TYPES.get(file.getContentType());
+        String key = String.format("kyc-documents/%d/%s/%s%s", userId, verificationId.toString(), side, extension);
+
+        try {
+            PutObjectRequest request = PutObjectRequest.builder()
+                    .bucket(bucketName)
+                    .key(key)
+                    .contentType(file.getContentType())
+                    .build();
+
+            s3Client.putObject(request,
+                    RequestBody.fromInputStream(file.getInputStream(), file.getSize()));
+
+            log.info("KYC document uploaded to S3: {}", key);
+            return key;
+        } catch (IOException e) {
+            log.error("S3 KYC upload failed for key: {}", key, e);
+            throw new RuntimeException("Failed to upload KYC document: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Generates a short-lived presigned GET URL for secure access to private S3 files.
+     */
+    public String generatePresignedGetUrl(String s3Key, Duration duration) {
+        if (s3Key == null || s3Key.isBlank()) {
+            return null;
+        }
+        try {
+            GetObjectRequest getObjectRequest = GetObjectRequest.builder()
+                    .bucket(bucketName)
+                    .key(s3Key)
+                    .build();
+
+            GetObjectPresignRequest presignRequest = GetObjectPresignRequest.builder()
+                    .signatureDuration(duration != null ? duration : Duration.ofMinutes(10))
+                    .getObjectRequest(getObjectRequest)
+                    .build();
+
+            PresignedGetObjectRequest presignedRequest = s3Presigner.presignGetObject(presignRequest);
+            return presignedRequest.url().toString();
+        } catch (Exception e) {
+            log.error("Failed to generate presigned URL for key: {}", s3Key, e);
+            throw new RuntimeException("Failed to generate secure document URL: " + e.getMessage());
+        }
+    }
+
     public void deleteFile(String fileUrl) {
         try {
             String key = extractKeyFromUrl(fileUrl);
@@ -100,6 +168,18 @@ public class S3Service {
         if (!ALLOWED_TYPES.containsKey(file.getContentType())) {
             throw new IllegalArgumentException(
                     "Only JPG, PNG, WEBP images allowed");
+        }
+    }
+
+    private void validateKycFile(MultipartFile file) {
+        if (file == null || file.isEmpty()) {
+            throw new IllegalArgumentException("File is empty or missing");
+        }
+        if (file.getSize() > MAX_FILE_SIZE) {
+            throw new IllegalArgumentException("File size exceeds 5MB limit");
+        }
+        if (file.getContentType() == null || !KYC_ALLOWED_TYPES.containsKey(file.getContentType())) {
+            throw new IllegalArgumentException("Only JPG, PNG, WEBP, or PDF files are allowed for identity verification");
         }
     }
 

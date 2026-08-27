@@ -57,6 +57,93 @@ final class EmailTemplates {
                 + "Explore Ceylon";
     }
 
+    static String kycApprovedHtml(String recipientName) {
+        String greetingName = (recipientName == null || recipientName.isBlank()) ? "there" : recipientName;
+        return "<!doctype html>"
+                + "<html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"></head>"
+                + "<body style=\"margin:0;padding:0;background-color:#f4f6f5;font-family:Arial,Helvetica,sans-serif;\">"
+                + "<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"background-color:#f4f6f5;padding:24px 0;\">"
+                + "<tr><td align=\"center\">"
+                + "<table role=\"presentation\" width=\"480\" cellpadding=\"0\" cellspacing=\"0\" style=\"max-width:480px;width:100%;background-color:#ffffff;border-radius:8px;overflow:hidden;border:1px solid #e5e7eb;\">"
+                + "<tr><td style=\"background-color:" + BRAND_GREEN + ";padding:24px 32px;\">"
+                + "<span style=\"font-size:20px;font-weight:bold;color:#ffffff;letter-spacing:0.3px;\">&#128205; Explore Ceylon</span>"
+                + "</td></tr>"
+                + "<tr><td style=\"padding:32px;\">"
+                + "<div style=\"text-align:center;margin-bottom:20px;\">"
+                + "<span style=\"display:inline-block;font-size:40px;\">&#9989;</span>"
+                + "<h2 style=\"margin:8px 0 0 0;color:#111827;font-size:20px;\">Identity Verified!</h2>"
+                + "</div>"
+                + "<p style=\"margin:0 0 16px 0;font-size:16px;color:#111827;\">Hi " + escape(greetingName) + ",</p>"
+                + "<p style=\"margin:0 0 16px 0;font-size:14px;line-height:1.6;color:#374151;\">"
+                + "Great news! Your identity document has been reviewed and <strong>approved</strong> by our team."
+                + "</p>"
+                + "<p style=\"margin:0 0 24px 0;font-size:14px;line-height:1.6;color:#374151;\">"
+                + "You can now book certified Tour Guides and local Vehicles seamlessly across Sri Lanka."
+                + "</p>"
+                + "</td></tr>"
+                + "<tr><td style=\"padding:20px 32px;background-color:#f9fafb;border-top:1px solid #e5e7eb;\">"
+                + "<p style=\"margin:0;font-size:12px;color:#9ca3af;\">&copy; Explore Ceylon &mdash; Discover Sri Lanka.</p>"
+                + "</td></tr>"
+                + "</table>"
+                + "</td></tr></table>"
+                + "</body></html>";
+    }
+
+    static String kycApprovedPlainText(String recipientName) {
+        String greetingName = (recipientName == null || recipientName.isBlank()) ? "there" : recipientName;
+        return "Hi " + greetingName + ",\n\n"
+                + "Great news! Your identity document has been reviewed and APPROVED by the Explore Ceylon team.\n\n"
+                + "You can now book Tour Guides and Vehicles.\n\n"
+                + "Explore Ceylon";
+    }
+
+    static String kycRejectedHtml(String recipientName, String reason) {
+        String greetingName = (recipientName == null || recipientName.isBlank()) ? "there" : recipientName;
+        String rejectionReason = (reason == null || reason.isBlank()) ? "Document was unreadable or invalid." : reason;
+        return "<!doctype html>"
+                + "<html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"></head>"
+                + "<body style=\"margin:0;padding:0;background-color:#f4f6f5;font-family:Arial,Helvetica,sans-serif;\">"
+                + "<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"background-color:#f4f6f5;padding:24px 0;\">"
+                + "<tr><td align=\"center\">"
+                + "<table role=\"presentation\" width=\"480\" cellpadding=\"0\" cellspacing=\"0\" style=\"max-width:480px;width:100%;background-color:#ffffff;border-radius:8px;overflow:hidden;border:1px solid #e5e7eb;\">"
+                + "<tr><td style=\"background-color:#b91c1c;padding:24px 32px;\">"
+                + "<span style=\"font-size:20px;font-weight:bold;color:#ffffff;letter-spacing:0.3px;\">&#128205; Explore Ceylon</span>"
+                + "</td></tr>"
+                + "<tr><td style=\"padding:32px;\">"
+                + "<div style=\"text-align:center;margin-bottom:20px;\">"
+                + "<span style=\"display:inline-block;font-size:40px;\">&#10060;</span>"
+                + "<h2 style=\"margin:8px 0 0 0;color:#111827;font-size:20px;\">Identity Verification Update</h2>"
+                + "</div>"
+                + "<p style=\"margin:0 0 16px 0;font-size:16px;color:#111827;\">Hi " + escape(greetingName) + ",</p>"
+                + "<p style=\"margin:0 0 16px 0;font-size:14px;line-height:1.6;color:#374151;\">"
+                + "Your identity verification submission could not be approved at this time."
+                + "</p>"
+                + "<div style=\"background-color:#fef2f2;border-left:4px solid #ef4444;padding:12px 16px;margin-bottom:20px;border-radius:4px;\">"
+                + "<p style=\"margin:0;font-size:13px;font-weight:bold;color:#991b1b;\">Reason for rejection:</p>"
+                + "<p style=\"margin:4px 0 0 0;font-size:14px;color:#7f1d1d;\">" + escape(rejectionReason) + "</p>"
+                + "</div>"
+                + "<p style=\"margin:0 0 24px 0;font-size:14px;line-height:1.6;color:#374151;\">"
+                + "Please sign in to Explore Ceylon and visit the Verification page to upload a new, clear photo of your ID document."
+                + "</p>"
+                + "</td></tr>"
+                + "<tr><td style=\"padding:20px 32px;background-color:#f9fafb;border-top:1px solid #e5e7eb;\">"
+                + "<p style=\"margin:0;font-size:12px;color:#9ca3af;\">&copy; Explore Ceylon &mdash; Discover Sri Lanka.</p>"
+                + "</td></tr>"
+                + "</table>"
+                + "</td></tr></table>"
+                + "</body></html>";
+    }
+
+    static String kycRejectedPlainText(String recipientName, String reason) {
+        String greetingName = (recipientName == null || recipientName.isBlank()) ? "there" : recipientName;
+        String rejectionReason = (reason == null || reason.isBlank()) ? "Document was unreadable or invalid." : reason;
+        return "Hi " + greetingName + ",\n\n"
+                + "Your identity verification submission could not be approved at this time.\n\n"
+                + "Reason: " + rejectionReason + "\n\n"
+                + "Please sign in to Explore Ceylon and visit the Verification page to resubmit your ID document.\n\n"
+                + "Explore Ceylon";
+    }
+
     private static String escape(String value) {
         return value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
     }

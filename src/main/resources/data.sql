@@ -129,3 +129,22 @@ SET review_count = 8 + (id * 3) % 25,
     rating = ROUND((4.5 + ((id * 5) % 5) * 0.1)::numeric, 1)
 WHERE (review_count IS NULL OR review_count = 0) AND (rating IS NULL OR rating = 0.0);
 
+-- ─────────────────────────────────────────────────────────────
+-- 6. Unified Category Check Constraint Updates (Phase 4 Final)
+-- ─────────────────────────────────────────────────────────────
+ALTER TABLE destinations DROP CONSTRAINT IF EXISTS destinations_category_check;
+ALTER TABLE destinations ADD CONSTRAINT destinations_category_check
+CHECK ((category)::text = ANY (ARRAY[
+    'ADVENTURE', 'CULTURE_HERITAGE', 'RELIGIOUS', 'WILDLIFE_NATURE',
+    'BEACH_COAST', 'HILL_COUNTRY', 'SCENIC_VIEWS', 'CITY_URBAN'
+]::text[]));
+
+ALTER TABLE hidden_gems DROP CONSTRAINT IF EXISTS hidden_gems_category_check;
+ALTER TABLE hidden_gems ADD CONSTRAINT hidden_gems_category_check
+CHECK ((category)::text = ANY (ARRAY[
+    'ADVENTURE', 'CULTURE_HERITAGE', 'RELIGIOUS', 'WILDLIFE_NATURE',
+    'BEACH_COAST', 'HILL_COUNTRY', 'SCENIC_VIEWS', 'CITY_URBAN'
+]::text[]));
+
+
+

@@ -27,7 +27,7 @@ import java.util.List;
 @RequiredArgsConstructor
 public class SecurityConfig {
 
-    @Value("${app.cors.allowed-origins:http://localhost:*,http://127.0.0.1:*,http://3.109.16.23:5173,http://3.109.16.23:5174}")
+    @Value("${app.cors.allowed-origins:http://localhost:*,https://localhost:*,http://127.0.0.1:*,https://127.0.0.1:*,https://exploreceylon.me,https://www.exploreceylon.me,https://*.exploreceylon.me,http://3.109.16.23:5173,http://3.109.16.23:5174}")
     private List<String> allowedOrigins;
 
     private final JwtAuthFilter jwtAuthFilter;
@@ -41,6 +41,12 @@ public class SecurityConfig {
             .csrf(csrf -> csrf.disable())
             .exceptionHandling(exception -> exception
                 .authenticationEntryPoint((request, response, authException) -> {
+                    String authHeader = request.getHeader("Authorization");
+                    String preview = (authHeader == null) ? "NULL" : (authHeader.length() <= 30 ? authHeader + " (len=" + authHeader.length() + ")" : authHeader.substring(0, 15) + "..." + authHeader.substring(authHeader.length() - 15) + " (len=" + authHeader.length() + ")");
+                    org.slf4j.LoggerFactory.getLogger("SecurityDiagnostic").warn(
+                        "[DIAGNOSTIC-401-ENTRYPOINT] Returning 401 for {} {} | AuthHeader: {} | Exception: {} - {}",
+                        request.getMethod(), request.getRequestURI(), preview, authException.getClass().getSimpleName(), authException.getMessage()
+                    );
                     response.setStatus(jakarta.servlet.http.HttpServletResponse.SC_UNAUTHORIZED);
                     response.setContentType("application/json");
                     response.getWriter().write("{\"error\":\"Unauthorized\",\"message\":\"Authentication token is missing, invalid, or expired\"}");
@@ -102,10 +108,14 @@ public class SecurityConfig {
                 .requestMatchers("/api/v1/budget/**").authenticated()
                 .requestMatchers(HttpMethod.POST, "/api/v1/contact").permitAll()  // public submit
                 .requestMatchers("/api/v1/contact/admin/**").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.POST, "/api/subscribe", "/api/v1/subscribe").permitAll() // public newsletter subscribe
+                .requestMatchers("/api/admin/subscribe-emails/**", "/api/v1/admin/subscribe-emails/**").hasRole("ADMIN")
                 .requestMatchers("/api/v1/payments/*/notify").permitAll() // PayHere webhooks
                 .requestMatchers("/api/v1/payments/**").authenticated()
                 .requestMatchers("/api/v1/guide-payments/**").hasRole("ADMIN")
+                .requestMatchers("/api/admin/verification/**", "/api/v1/admin/verification/**").hasRole("ADMIN")
                 .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
+                .requestMatchers("/api/verification/**", "/api/v1/verification/**").authenticated()
 
                 // Destinations: public read, admin-only write; nested reviews public read/auth post/admin delete
                 .requestMatchers(HttpMethod.POST, "/api/v1/destinations/*/reviews").authenticated()

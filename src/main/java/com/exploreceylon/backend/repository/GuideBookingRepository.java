@@ -20,6 +20,9 @@ public interface GuideBookingRepository
 
     long countByStatus(GuideBooking.BookingStatus status);
 
+    @Query("SELECT COALESCE(SUM(b.totalCost), 0.0) FROM GuideBooking b WHERE b.status = :status")
+    Double sumTotalCostByStatus(@Param("status") GuideBooking.BookingStatus status);
+
     // Dashboard-wide totals — single aggregate query instead of loading
     // every booking row to sum/count/filter in Java.
     @Query("SELECT COALESCE(SUM(b.totalCost), 0) FROM GuideBooking b")

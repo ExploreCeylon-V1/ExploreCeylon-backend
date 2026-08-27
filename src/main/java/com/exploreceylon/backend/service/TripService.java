@@ -1,6 +1,9 @@
 package com.exploreceylon.backend.service;
 
 import com.exploreceylon.backend.dto.trip.*;
+import com.exploreceylon.backend.exception.ForbiddenException;
+import com.exploreceylon.backend.exception.ResourceNotFoundException;
+import com.exploreceylon.backend.exception.UnauthenticatedException;
 import com.exploreceylon.backend.model.*;
 import com.exploreceylon.backend.model.Trip.TripStatus;
 import com.exploreceylon.backend.repository.*;
@@ -14,9 +17,11 @@ import com.fasterxml.jackson.databind.JsonNode;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 @Service
@@ -32,7 +37,11 @@ public class TripService {
     private final AiService             aiService;
     private final VehicleBookingRepository vehicleBookingRepository;
     private final GuideBookingRepository   guideBookingRepository;
+    private final HotelBookingRepository   hotelBookingRepository;
+    private final DestinationRepository    destinationRepository;
+    private final HiddenGemRepository      hiddenGemRepository;
     private final BudgetRepository         budgetRepository;
+    private final BudgetItemRepository     budgetItemRepository;
     private final ItineraryAssemblyService itineraryAssemblyService;
     private final com.exploreceylon.backend.service.planner.PlannerFacadeService plannerFacadeService;
     private final com.exploreceylon.backend.service.planner.PlannerTripMapper plannerTripMapper;
@@ -41,16 +50,16 @@ public class TripService {
     private final com.exploreceylon.backend.repository.TripActivityLogRepository activityLogRepository;
 
     // Fixed conversion used only to compare the assembled itinerary's
-    // USD cost estimate against a user's LKR budget target (fix 4).
-    // Not a live FX rate — good enough for a warning-level estimate.
-    private static final double USD_TO_LKR_RATE = 300.0;
+    // USD cost estimate against a user's LKR budget target.
+    // Standard conversion rate aligned across system services (325.0 LKR / USD).
+    private static final double USD_TO_LKR_RATE = 325.0;
 
     // ── Get current logged-in user ─────────────────────────
     private User getCurrentUser() {
         String email = SecurityContextHolder.getContext()
                 .getAuthentication().getName();
         return userRepository.findByEmail(email)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+                .orElseThrow(() -> new UnauthenticatedException("User not found"));
     }
 
     // ── Auto-generate trip title ───────────────────────────
@@ -186,7 +195,7 @@ public class TripService {
     // ── Ownership guard — every non-public trip operation must own the trip ──
     private void assertOwner(Trip trip, User user) {
         if (!trip.getUser().getId().equals(user.getId())) {
-            throw new RuntimeException("Not authorized to access this trip");
+            throw new ForbiddenException("Not authorized to access this trip");
         }
     }
 
@@ -204,9 +213,15 @@ public class TripService {
     @Transactional(readOnly = true)
     public TripResponse getTripByShareToken(String token) {
         Trip trip = tripRepository.findByShareToken(token)
-                .orElseThrow(() -> new RuntimeException(
+                .orElseThrow(() -> new ResourceNotFoundException(
                         "Trip not found for token: " + token));
-        return toResponse(trip);
+        TripResponse res = toResponse(trip);
+
+        budgetRepository.findByTripId(trip.getId()).ifPresent(budget -> {
+            res.setBudgetSummary(toPublicBudgetSummary(budget));
+        });
+
+        return res;
     }
 
     // ── Update Trip Day ────────────────────────────────────
@@ -453,8 +468,14 @@ public class TripService {
 
         trip.setAiGenerated(true);
         trip.setStatus(TripStatus.GENERATED);
-        if (plannerResponse.getEstimatedCost() != null) {
-            trip.setBudgetAmountLkr(plannerResponse.getEstimatedCost().getGrandTotal());
+        if (req.getBudgetRange() != null) {
+            trip.setBudgetRange(req.getBudgetRange());
+        }
+        double newEstimatedTotal = trip.getDays().stream()
+                .mapToDouble(d -> d.getEstimatedDayCost() != null ? d.getEstimatedDayCost() : 0.0)
+                .sum();
+        if (newEstimatedTotal > 0) {
+            trip.setBudgetAmountLkr(newEstimatedTotal);
         }
 
         Trip saved = tripRepository.save(trip);
@@ -592,5 +613,360 @@ public class TripService {
         res.setOrderIndex(i.getOrderIndex());
         res.setNotes(i.getNotes());
         return res;
+    }
+
+    // ── MAPPER: Budget → TripBudgetSummaryResponse (public) ──
+    private TripBudgetSummaryResponse toPublicBudgetSummary(Budget budget) {
+        if (budget == null) return null;
+
+        List<BudgetItem> items = budget.getItems() != null ? budget.getItems() : java.util.Collections.emptyList();
+
+        double totalSpent = items.stream()
+                .mapToDouble(BudgetItem::getAmount)
+                .sum();
+        double totalBudget = budget.getTotalBudget() != null ? budget.getTotalBudget() : 0.0;
+        double remaining = totalBudget - totalSpent;
+        double usedPercentage = totalBudget > 0
+                ? (totalSpent / totalBudget) * 100.0
+                : 0.0;
+
+        String status = "ON_TRACK";
+        if (usedPercentage > 100.0) {
+            status = "OVER_BUDGET";
+        } else if (usedPercentage >= 80.0) {
+            status = "WARNING";
+        }
+
+        Map<String, Double> categoryBudgets = new HashMap<>();
+        if (budget.getCategoryBudgets() != null) {
+            budget.getCategoryBudgets().forEach((cat, amt) -> {
+                if (cat != null) categoryBudgets.put(cat.name(), amt);
+            });
+        }
+
+        Map<String, Double> categorySpent = new HashMap<>();
+        items.forEach(item -> {
+            if (item.getCategory() != null) {
+                categorySpent.merge(item.getCategory().name(), item.getAmount(), Double::sum);
+            }
+        });
+
+        List<TripBudgetSummaryResponse.PublicBudgetItemResponse> publicItems = items.stream()
+                .map(item -> TripBudgetSummaryResponse.PublicBudgetItemResponse.builder()
+                        .id(item.getId())
+                        .category(item.getCategory() != null ? item.getCategory().name() : "OTHER")
+                        .title(item.getTitle())
+                        .amount(item.getAmount())
+                        .currency(item.getCurrency() != null ? item.getCurrency() : "USD")
+                        .date(item.getDate())
+                        .autoAdded(item.getAutoAdded())
+                        .notes(item.getNotes())
+                        .build())
+                .collect(Collectors.toList());
+
+        return TripBudgetSummaryResponse.builder()
+                .totalBudget(totalBudget)
+                .totalSpent(totalSpent)
+                .remaining(remaining)
+                .usedPercentage(usedPercentage)
+                .currency(budget.getCurrency() != null ? budget.getCurrency() : "USD")
+                .status(status)
+                .categoryBudgets(categoryBudgets)
+                .categorySpent(categorySpent)
+                .items(publicItems)
+                .build();
+    }
+
+    // ── Add Day to Trip (Append Only) ──────────────────────
+    public TripResponse addDayToTrip(Long tripId, AddDayRequest req) {
+        Trip trip = tripRepository.findById(tripId)
+                .orElseThrow(() -> new RuntimeException("Trip not found: " + tripId));
+        assertOwner(trip, getCurrentUser());
+
+        List<TripDay> days = trip.getDays();
+        TripDay lastDay = (days != null && !days.isEmpty())
+                ? days.stream().max(Comparator.comparingInt(TripDay::getDayNumber)).orElse(days.get(days.size() - 1))
+                : null;
+
+        int newDayNumber = (lastDay != null) ? lastDay.getDayNumber() + 1 : 1;
+        LocalDate newDate = (lastDay != null && lastDay.getDate() != null)
+                ? lastDay.getDate().plusDays(1)
+                : trip.getEndDate().plusDays(1);
+
+        // Resolve leg origin coordinate
+        ItineraryAssemblyService.GeoPoint legOrigin = null;
+        if (lastDay != null && lastDay.getItems() != null && !lastDay.getItems().isEmpty()) {
+            TripDayItem lastItem = lastDay.getItems().stream()
+                    .max(Comparator.comparingInt(TripDayItem::getOrderIndex))
+                    .orElse(lastDay.getItems().get(lastDay.getItems().size() - 1));
+            if (lastItem.getReferenceId() != null) {
+                try {
+                    Long refId = Long.parseLong(lastItem.getReferenceId());
+                    if (lastItem.getType() == TripDayItem.ItemType.GEM) {
+                        legOrigin = hiddenGemRepository.findById(refId)
+                                .filter(g -> g.getLatitude() != null && g.getLongitude() != null)
+                                .map(g -> new ItineraryAssemblyService.GeoPoint(g.getLatitude(), g.getLongitude()))
+                                .orElse(null);
+                    } else {
+                        legOrigin = destinationRepository.findById(refId)
+                                .filter(d -> d.getLatitude() != null && d.getLongitude() != null)
+                                .map(d -> new ItineraryAssemblyService.GeoPoint(d.getLatitude(), d.getLongitude()))
+                                .orElse(null);
+                    }
+                } catch (NumberFormatException ignored) {}
+            }
+        }
+        if (legOrigin == null && lastDay != null && lastDay.getRegion() != null) {
+            legOrigin = itineraryAssemblyService.geocode(lastDay.getRegion()).orElse(null);
+        }
+        if (legOrigin == null) {
+            legOrigin = itineraryAssemblyService.geocode(trip.getToLocation())
+                    .or(() -> itineraryAssemblyService.geocode(trip.getFromLocation()))
+                    .orElse(new ItineraryAssemblyService.GeoPoint(6.9271, 79.8612));
+        }
+
+        String targetArea = req.getTargetArea().trim();
+        ItineraryAssemblyService.GeoPoint targetGeo = itineraryAssemblyService.geocode(targetArea).orElse(legOrigin);
+
+        BudgetLevel budgetLevel = BudgetLevel.MID_RANGE;
+        if (trip.getBudgetRange() != null) {
+            try {
+                budgetLevel = BudgetLevel.valueOf(trip.getBudgetRange().name());
+            } catch (Exception ignored) {}
+        }
+        int groupSize = trip.getGroupSize() != null ? trip.getGroupSize() : 2;
+        List<String> travelStyles = req.getTravelStyles() != null && !req.getTravelStyles().isEmpty()
+                ? req.getTravelStyles()
+                : (trip.getTravelStyle() != null ? List.of(trip.getTravelStyle().name()) : List.of("BALANCED"));
+
+        List<ItineraryAssemblyService.PlannedDay> plannedDays = itineraryAssemblyService.assemble(
+                legOrigin, targetGeo, newDate, 1, groupSize, budgetLevel, travelStyles, null);
+
+        ItineraryAssemblyService.PlannedDay pd = (plannedDays != null && !plannedDays.isEmpty())
+                ? plannedDays.get(0)
+                : new ItineraryAssemblyService.PlannedDay(1, newDate, targetArea, List.of(), 0.0);
+
+        String dayRegion = (pd.region() != null && !pd.region().isBlank()) ? pd.region() : targetArea;
+
+        // Generate narrative for ONLY this new day
+        List<Map<String, Object>> stopsPayload = new ArrayList<>();
+        if (pd.stops() != null) {
+            for (ItineraryAssemblyService.PlannedStop s : pd.stops()) {
+                Map<String, Object> stopMap = new HashMap<>();
+                stopMap.put("type", s.type().name());
+                stopMap.put("name", s.name());
+                stopMap.put("slot", s.slot());
+                stopsPayload.add(stopMap);
+            }
+        }
+        Map<String, Object> dayMap = new HashMap<>();
+        dayMap.put("dayNumber", newDayNumber);
+        dayMap.put("date", newDate.toString());
+        dayMap.put("region", dayRegion);
+        dayMap.put("stops", stopsPayload);
+
+        Map<String, Object> narrativeBody = new HashMap<>();
+        narrativeBody.put("start_date", newDate.toString());
+        narrativeBody.put("end_date", newDate.toString());
+        narrativeBody.put("travel_style", String.join(", ", travelStyles));
+        narrativeBody.put("budget_range", budgetLevel.name());
+        narrativeBody.put("group_size", groupSize);
+        narrativeBody.put("starting_point", lastDay != null && lastDay.getRegion() != null ? lastDay.getRegion() : trip.getFromLocation());
+        narrativeBody.put("to_location", targetArea);
+        narrativeBody.put("days", List.of(dayMap));
+
+        String dayTheme = "Day " + newDayNumber + ": " + dayRegion;
+        String dayTips = "Explore the highlights of " + dayRegion + ". Stay hydrated and keep local currency on hand.";
+        Map<Integer, String> stopDescriptions = new HashMap<>();
+
+        try {
+            JsonNode narrativeData = aiService.generateNarrative(narrativeBody)
+                    .block(java.time.Duration.ofSeconds(10));
+            if (narrativeData != null) {
+                JsonNode aiData = narrativeData.path("data");
+                JsonNode narrativeDay = findNarrativeDay(aiData.isMissingNode() ? narrativeData : aiData, newDayNumber);
+                if (narrativeDay != null) {
+                    String aiTheme = textOrNull(narrativeDay, "theme");
+                    String aiTips = textOrNull(narrativeDay, "tips");
+                    if (aiTheme != null) dayTheme = aiTheme;
+                    if (aiTips != null) dayTips = aiTips;
+
+                    JsonNode aiStops = narrativeDay.path("stops");
+                    if (aiStops.isArray()) {
+                        for (int i = 0; i < aiStops.size(); i++) {
+                            String desc = textOrNull(aiStops.get(i), "description");
+                            if (desc != null) stopDescriptions.put(i, desc);
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.warn("AI narrative generation failed for added day {}. Using fallback.", newDayNumber, e);
+        }
+
+        TripDay newDay = TripDay.builder()
+                .trip(trip)
+                .dayNumber(newDayNumber)
+                .date(newDate)
+                .region(dayRegion)
+                .theme(dayTheme)
+                .tips(dayTips)
+                .estimatedDayCost(pd.estimatedDayCost())
+                .items(new ArrayList<>())
+                .build();
+
+        if (pd.stops() != null) {
+            int order = 1;
+            int stopIdx = 0;
+            for (ItineraryAssemblyService.PlannedStop s : pd.stops()) {
+                TripDayItem.ItemType itemType = (s.type() == ItineraryAssemblyService.StopType.GEM)
+                        ? TripDayItem.ItemType.GEM
+                        : TripDayItem.ItemType.ACTIVITY;
+                String desc = stopDescriptions.get(stopIdx++);
+                String itemNotes = desc != null ? "[" + s.slot() + "] " + desc : "[" + s.slot() + "] " + s.name();
+
+                TripDayItem item = TripDayItem.builder()
+                        .tripDay(newDay)
+                        .type(itemType)
+                        .title(s.name())
+                        .referenceId(s.referenceId() != null ? String.valueOf(s.referenceId()) : null)
+                        .cost(s.costUsd() != null ? s.costUsd() : 0.0)
+                        .currency("USD")
+                        .orderIndex(order++)
+                        .notes(itemNotes)
+                        .build();
+                newDay.getItems().add(item);
+            }
+        }
+
+        trip.getDays().add(newDay);
+        tripDayRepository.save(newDay);
+
+        trip.setEndDate(newDate);
+        double dayCost = pd.estimatedDayCost();
+        double dayCostLkr = dayCost * USD_TO_LKR_RATE;
+        trip.setBudgetAmountLkr((trip.getBudgetAmountLkr() != null ? trip.getBudgetAmountLkr() : 0.0) + dayCostLkr);
+        Trip savedTrip = tripRepository.save(trip);
+
+        Optional<Budget> budgetOpt = budgetRepository.findByTripId(tripId);
+        if (budgetOpt.isPresent()) {
+            Budget budget = budgetOpt.get();
+            budget.setTotalBudget((budget.getTotalBudget() != null ? budget.getTotalBudget() : 0.0) + dayCost);
+            if (budget.getCategoryBudgets() != null && !budget.getCategoryBudgets().isEmpty()) {
+                BudgetItem.ItemCategory targetCategory = budget.getCategoryBudgets().containsKey(BudgetItem.ItemCategory.MISC)
+                        ? BudgetItem.ItemCategory.MISC
+                        : (budget.getCategoryBudgets().containsKey(BudgetItem.ItemCategory.ACTIVITY)
+                            ? BudgetItem.ItemCategory.ACTIVITY
+                            : budget.getCategoryBudgets().keySet().iterator().next());
+                double currentVal = budget.getCategoryBudgets().getOrDefault(targetCategory, 0.0);
+                budget.getCategoryBudgets().put(targetCategory, currentVal + dayCost);
+            }
+            budgetRepository.save(budget);
+        }
+
+        log.info("Appended Day {} to trip {}: date={}, region={}, estimatedCost={}",
+                newDayNumber, tripId, newDate, dayRegion, dayCost);
+        return toResponse(savedTrip);
+    }
+
+    // ── Remove Last Day from Trip ─────────────────────────
+    public TripResponse removeLastDay(Long tripId, Long dayId) {
+        Trip trip = tripRepository.findById(tripId)
+                .orElseThrow(() -> new RuntimeException("Trip not found: " + tripId));
+        assertOwner(trip, getCurrentUser());
+
+        List<TripDay> days = trip.getDays();
+        if (days == null || days.size() <= 1) {
+            throw new RuntimeException("Cannot remove day: Trip must have at least 1 day.");
+        }
+
+        TripDay lastDay = days.stream()
+                .max(Comparator.comparingInt(TripDay::getDayNumber))
+                .orElse(days.get(days.size() - 1));
+
+        if (!lastDay.getId().equals(dayId)) {
+            throw new RuntimeException("Only the last day of the trip (Day " + lastDay.getDayNumber() + ") can be removed.");
+        }
+
+        LocalDate targetDate = lastDay.getDate();
+
+        // 1. Vehicle booking guard
+        boolean hasVehicle = vehicleBookingRepository.findByTripIdOrderByPickupDate(tripId).stream()
+                .filter(b -> b.getStatus() != VehicleBooking.BookingStatus.CANCELLED)
+                .anyMatch(b -> targetDate != null && b.getPickupDate() != null && b.getDropoffDate() != null
+                        && !targetDate.isBefore(b.getPickupDate())
+                        && !targetDate.isAfter(b.getDropoffDate()));
+        if (hasVehicle) {
+            throw new RuntimeException("Cannot remove Day " + lastDay.getDayNumber() + ": Active vehicle booking exists on " + targetDate + ". Please cancel or reassign the booking first.");
+        }
+
+        // 2. Guide booking guard
+        boolean hasGuide = guideBookingRepository.findByTripIdOrderByStartDate(tripId).stream()
+                .filter(b -> b.getStatus() != GuideBooking.BookingStatus.CANCELLED)
+                .anyMatch(b -> targetDate != null && b.getStartDate() != null && b.getEndDate() != null
+                        && !targetDate.isBefore(b.getStartDate())
+                        && !targetDate.isAfter(b.getEndDate()));
+        if (hasGuide) {
+            throw new RuntimeException("Cannot remove Day " + lastDay.getDayNumber() + ": Active tour guide booking exists on " + targetDate + ". Please cancel or reassign the booking first.");
+        }
+
+        // 3. Hotel booking guard
+        boolean hasHotel = hotelBookingRepository.findByTripIdOrderByCheckIn(tripId).stream()
+                .filter(b -> b.getStatus() != HotelBooking.BookingStatus.CANCELLED)
+                .anyMatch(b -> (b.getTripDay() != null && b.getTripDay().getId().equals(lastDay.getId()))
+                        || (targetDate != null && b.getCheckIn() != null && b.getCheckOut() != null
+                            && !targetDate.isBefore(b.getCheckIn())
+                            && !targetDate.isAfter(b.getCheckOut())));
+        if (hasHotel) {
+            throw new RuntimeException("Cannot remove Day " + lastDay.getDayNumber() + ": Active hotel booking exists on " + targetDate + ". Please cancel or reassign the booking first.");
+        }
+
+        // 4. Budget item expense guard
+        Optional<Budget> budgetOpt = budgetRepository.findByTripId(tripId);
+        if (budgetOpt.isPresent()) {
+            Budget budget = budgetOpt.get();
+            boolean hasExpense = budget.getItems() != null && budget.getItems().stream().anyMatch(item ->
+                    (targetDate != null && item.getDate() != null && item.getDate().isEqual(targetDate))
+                    || (item.getNotes() != null && item.getNotes().contains("Day " + lastDay.getDayNumber()))
+            );
+            if (hasExpense) {
+                throw new RuntimeException("Cannot remove Day " + lastDay.getDayNumber() + ": Budget expense items exist on " + targetDate + ". Please delete or reassign them in Budget Tracker first.");
+            }
+        }
+
+        // Identify previous day
+        List<TripDay> sortedDays = days.stream()
+                .sorted(Comparator.comparingInt(TripDay::getDayNumber))
+                .collect(Collectors.toList());
+        TripDay previousDay = sortedDays.get(sortedDays.size() - 2);
+
+        double removedCost = lastDay.getEstimatedDayCost() != null ? lastDay.getEstimatedDayCost() : 0.0;
+        double removedCostLkr = removedCost * USD_TO_LKR_RATE;
+
+        trip.getDays().remove(lastDay);
+        tripDayRepository.delete(lastDay);
+
+        trip.setEndDate(previousDay.getDate());
+        trip.setBudgetAmountLkr(Math.max(0.0, (trip.getBudgetAmountLkr() != null ? trip.getBudgetAmountLkr() : 0.0) - removedCostLkr));
+        Trip savedTrip = tripRepository.save(trip);
+
+        if (budgetOpt.isPresent()) {
+            Budget budget = budgetOpt.get();
+            budget.setTotalBudget(Math.max(0.0, (budget.getTotalBudget() != null ? budget.getTotalBudget() : 0.0) - removedCost));
+            if (budget.getCategoryBudgets() != null && !budget.getCategoryBudgets().isEmpty()) {
+                BudgetItem.ItemCategory targetCategory = budget.getCategoryBudgets().containsKey(BudgetItem.ItemCategory.MISC)
+                        ? BudgetItem.ItemCategory.MISC
+                        : (budget.getCategoryBudgets().containsKey(BudgetItem.ItemCategory.ACTIVITY)
+                            ? BudgetItem.ItemCategory.ACTIVITY
+                            : budget.getCategoryBudgets().keySet().iterator().next());
+                double currentVal = budget.getCategoryBudgets().getOrDefault(targetCategory, 0.0);
+                budget.getCategoryBudgets().put(targetCategory, Math.max(0.0, currentVal - removedCost));
+            }
+            budgetRepository.save(budget);
+        }
+
+        log.info("Removed Day {} from trip {}: new endDate={}, removedCost={}",
+                lastDay.getDayNumber(), tripId, previousDay.getDate(), removedCost);
+        return toResponse(savedTrip);
     }
 }

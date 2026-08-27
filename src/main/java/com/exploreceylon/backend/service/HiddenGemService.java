@@ -2,6 +2,7 @@ package com.exploreceylon.backend.service;
 
 import com.exploreceylon.backend.dto.gem.CreateGemRequest;
 import com.exploreceylon.backend.dto.gem.GemResponse;
+import com.exploreceylon.backend.exception.ResourceNotFoundException;
 import com.exploreceylon.backend.model.HiddenGem;
 import com.exploreceylon.backend.model.User;
 import com.exploreceylon.backend.repository.HiddenGemRepository;
@@ -70,7 +71,7 @@ public class HiddenGemService {
     // ── Get Gem By ID ──────────────────────────────────────
     public GemResponse getGemById(Long id) {
         HiddenGem gem = gemRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException(
+                .orElseThrow(() -> new ResourceNotFoundException(
                         "Gem not found: " + id));
         return toResponse(gem);
     }
@@ -144,7 +145,7 @@ public class HiddenGemService {
     // ── Admin — Approve Gem ────────────────────────────────
     public GemResponse approveGem(Long id) {
         HiddenGem gem = gemRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException(
+                .orElseThrow(() -> new ResourceNotFoundException(
                         "Gem not found: " + id));
         gem.setApproved(true);
         log.info("Gem approved: {}", gem.getTitle());
@@ -162,7 +163,7 @@ public class HiddenGemService {
     // ── Admin — Update Gem ─────────────────────────────────
     public GemResponse updateGem(Long id, CreateGemRequest req) {
         HiddenGem gem = gemRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException(
+                .orElseThrow(() -> new ResourceNotFoundException(
                         "Gem not found: " + id));
 
         if (req.getTitle()        != null) gem.setTitle(req.getTitle());

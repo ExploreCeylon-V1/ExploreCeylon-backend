@@ -1,5 +1,6 @@
 package com.exploreceylon.backend.exception;
 
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.BadCredentialsException;
@@ -11,6 +12,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 @RestControllerAdvice
+@Slf4j
 public class GlobalExceptionHandler {
 
     // Validation errors
@@ -36,6 +38,48 @@ public class GlobalExceptionHandler {
     public ResponseEntity<Map<String, String>> handleRateLimit(
             com.exploreceylon.backend.exception.RateLimitException ex) {
         return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                .body(Map.of("error", ex.getMessage()));
+    }
+
+    // Unauthenticated (401)
+    @ExceptionHandler(UnauthenticatedException.class)
+    public ResponseEntity<Map<String, String>> handleUnauthenticated(UnauthenticatedException ex) {
+        log.warn("[DIAGNOSTIC-CONTROLLER-401] UnauthenticatedException thrown: {}", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .body(Map.of("error", "Unauthorized", "message", ex.getMessage()));
+    }
+
+    // Forbidden (403)
+    @ExceptionHandler(ForbiddenException.class)
+    public ResponseEntity<Map<String, String>> handleForbidden(ForbiddenException ex) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(Map.of("error", "Forbidden", "message", ex.getMessage()));
+    }
+
+    // KYC Verification Gate (403)
+    @ExceptionHandler(KycVerificationException.class)
+    public ResponseEntity<Map<String, Object>> handleKycVerification(KycVerificationException ex) {
+        Map<String, Object> body = new HashMap<>();
+        body.put("error", "Forbidden");
+        body.put("code", ex.getCode());
+        body.put("message", ex.getMessage());
+        if (ex.getRejectionReason() != null) {
+            body.put("rejectionReason", ex.getRejectionReason());
+        }
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(body);
+    }
+
+    // Resource Not Found (404)
+    @ExceptionHandler(ResourceNotFoundException.class)
+    public ResponseEntity<Map<String, String>> handleNotFound(ResourceNotFoundException ex) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(Map.of("error", "Not Found", "message", ex.getMessage()));
+    }
+
+    // Duplicate Subscription (409)
+    @ExceptionHandler(DuplicateSubscriptionException.class)
+    public ResponseEntity<Map<String, String>> handleDuplicateSubscription(DuplicateSubscriptionException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
                 .body(Map.of("error", ex.getMessage()));
     }
 

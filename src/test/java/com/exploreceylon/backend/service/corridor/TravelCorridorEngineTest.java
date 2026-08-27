@@ -80,4 +80,79 @@ class TravelCorridorEngineTest {
 
         assertEquals(2, filtered.size(), "Disabling corridor must return all raw candidates");
     }
+
+    @Test
+    @DisplayName("Should retain wide destination catchment destinations while strictly excluding narrow intermediate detours")
+    void testDualZoneCorridor_RetainsDestinationZoneAndExcludesIntermediateDetours() {
+        GeoPoint colombo = new GeoPoint(6.9271, 79.8612);
+        GeoPoint ella = new GeoPoint(6.8667, 81.0466);
+
+        // 1. Departure / start zone (Colombo district)
+        Destination gangaramaya = Destination.builder()
+                .id(1L).name("Gangaramaya Temple").district("Colombo")
+                .latitude(6.9167).longitude(79.8569).build();
+
+        // 2. Intermediate highway on-route (Ratnapura / Balangoda on A4 highway)
+        Destination ratnapuraGem = Destination.builder()
+                .id(2L).name("Ratnapura Gem Museum").district("Ratnapura")
+                .latitude(6.6828).longitude(80.4036).build();
+
+        // 3. Intermediate lateral detour (Sinharaja Rainforest - 30km off highway)
+        Destination sinharaja = Destination.builder()
+                .id(3L).name("Sinharaja Forest Reserve").district("Ratnapura")
+                .latitude(6.4167).longitude(80.4667).build();
+
+        // 4. Destination zone (Ella / Badulla district, ~18km off exact endpoint)
+        Destination diyalumaFalls = Destination.builder()
+                .id(4L).name("Diyaluma Falls").district("Badulla")
+                .latitude(6.7333).longitude(81.0333).build();
+
+        List<Destination> candidates = List.of(gangaramaya, ratnapuraGem, sinharaja, diyalumaFalls);
+
+        CorridorContext context = CorridorContext.builder()
+                .origin(colombo)
+                .destination(ella)
+                .routePath(List.of(colombo, new GeoPoint(6.6828, 80.4036), new GeoPoint(6.75, 80.70), ella))
+                .originDistrict("Colombo")
+                .destinationDistrict("Badulla")
+                .intermediateWidthKm(8.0)
+                .destinationZoneWidthKm(30.0)
+                .destinationZoneRadiusKm(25.0)
+                .maxDetourKm(25.0)
+                .corridorEnabled(true)
+                .build();
+
+        List<Destination> filtered = corridorEngine.filterCandidates(candidates, context);
+
+        assertFalse(filtered.stream().anyMatch(d -> d.getName().contains("Gangaramaya")), "Start district POI must be excluded for multi-district trip");
+        assertTrue(filtered.stream().anyMatch(d -> d.getName().contains("Ratnapura")), "On-route intermediate POI should be retained");
+        assertFalse(filtered.stream().anyMatch(d -> d.getName().contains("Sinharaja")), "Far intermediate detour (Sinharaja) must be excluded by narrow 8km ribbon");
+        assertTrue(filtered.stream().anyMatch(d -> d.getName().contains("Diyaluma")), "Destination zone POI in Badulla should be retained by wide catchment");
+    }
+
+    @Test
+    @DisplayName("Single-district trip: retains places in the starting district")
+    void testSingleDistrictCorridor_RetainsStartingDistrictPlaces() {
+        GeoPoint colombo = new GeoPoint(6.9271, 79.8612);
+
+        Destination gangaramaya = Destination.builder()
+                .id(1L).name("Gangaramaya Temple").district("Colombo")
+                .latitude(6.9167).longitude(79.8569).build();
+
+        List<Destination> candidates = List.of(gangaramaya);
+
+        CorridorContext context = CorridorContext.builder()
+                .origin(colombo)
+                .destination(colombo)
+                .originDistrict("Colombo")
+                .destinationDistrict("Colombo")
+                .widthKm(10.0)
+                .maxDetourKm(20.0)
+                .corridorEnabled(true)
+                .build();
+
+        List<Destination> filtered = corridorEngine.filterCandidates(candidates, context);
+        assertTrue(filtered.stream().anyMatch(d -> d.getName().contains("Gangaramaya")),
+                "Single-district trip must retain starting district places");
+    }
 }

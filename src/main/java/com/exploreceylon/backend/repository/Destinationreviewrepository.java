@@ -18,4 +18,9 @@ public interface Destinationreviewrepository extends JpaRepository<DestinationRe
 
     @Query("SELECT COUNT(r) FROM DestinationReview r WHERE r.destination.id = :destinationId")
     Integer countByDestinationId(@Param("destinationId") Long destinationId);
+
+    @org.springframework.data.jpa.repository.Modifying
+    @org.springframework.transaction.annotation.Transactional
+    @Query("DELETE FROM DestinationReview r WHERE r.destination.id = :destinationId")
+    void deleteByDestinationId(@Param("destinationId") Long destinationId);
 }

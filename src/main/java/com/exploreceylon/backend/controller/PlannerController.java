@@ -1,6 +1,7 @@
 package com.exploreceylon.backend.controller;
 
 import com.exploreceylon.backend.dto.planner.*;
+import com.exploreceylon.backend.exception.UnauthenticatedException;
 import com.exploreceylon.backend.model.User;
 import com.exploreceylon.backend.repository.UserRepository;
 import com.exploreceylon.backend.service.planner.PlannerFacadeService;
@@ -115,6 +116,6 @@ public class PlannerController {
     private User getCurrentUser() {
         String email = SecurityContextHolder.getContext().getAuthentication().getName();
         return userRepository.findByEmail(email)
-                .orElseThrow(() -> new RuntimeException("User not found: " + email));
+                .orElseThrow(() -> new UnauthenticatedException("User not found: " + email));
     }
 }
