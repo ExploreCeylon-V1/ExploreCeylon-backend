@@ -78,11 +78,16 @@ public class AdminService {
         long totalVehicles = vehicleRepository.count();
         long totalGuides = guideRepository.count();
 
-        long vehicleBookingCount = vehicleBookingRepository.count();
-        long guideBookingCount = guideBookingRepository.count();
+        long vehicleBookingCount = vehicleBookingRepository.countByStatus(VehicleBooking.BookingStatus.CONFIRMED);
+        long guideBookingCount = guideBookingRepository.countByStatus(GuideBooking.BookingStatus.CONFIRMED);
+        long totalBookings = vehicleBookingCount + guideBookingCount;
 
-        double vehicleRevenue = vehicleBookingRepository.sumAllRevenue();
-        double guideRevenue = guideBookingRepository.sumAllRevenue();
+        Double completedVehicleRevenue = vehicleBookingRepository.sumTotalCostByStatus(VehicleBooking.BookingStatus.COMPLETED);
+        double vehicleRevenue = completedVehicleRevenue != null ? completedVehicleRevenue : 0.0;
+
+        Double completedGuideRevenue = guideBookingRepository.sumTotalCostByStatus(GuideBooking.BookingStatus.COMPLETED);
+        double guideRevenue = completedGuideRevenue != null ? completedGuideRevenue : 0.0;
+
         double totalRevenue = vehicleRevenue + guideRevenue;
         double totalCommission = totalRevenue * COMMISSION_RATE;
 
@@ -96,7 +101,7 @@ public class AdminService {
 
         return DashboardStatsResponse.builder()
                 .totalUsers(totalUsers)
-                .totalBookings(vehicleBookingCount + guideBookingCount)
+                .totalBookings(totalBookings)
                 .totalRevenue(round(totalRevenue))
                 .activeTrips(activeTrips)
                 .totalVehicles(totalVehicles)
